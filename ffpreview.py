@@ -87,17 +87,24 @@ cfg.vid = ''
 cfg.tmpdir = None
 cfg.grid_columns = 5
 cfg.thumb_width = 128
-cfg.scene_thresh = 0.2 #0.15
+cfg.method = 'iframe'
+cfg.frame_skip = None
+cfg.scene_thresh = None
 #cfg.startts = '0'
 
 
 # parse command line arguments
-parser = argparse.ArgumentParser(description='Generate clickable video thumbnail preview.')
+parser = argparse.ArgumentParser(
+    description='Generate clickable video thumbnail preview.',
+    epilog="The -i, -f and -s options are mutually exclusive, the last one specified wins."
+)
 parser.add_argument('filename', help='input video file')
-parser.add_argument('-c', '--grid_cols', type=int, metavar='INT', help='number of columns in thumbnail preview ')
-parser.add_argument('-s', '--scene_thresh', type=float, metavar='FLOAT', help='scene change detection threshold')
-parser.add_argument('-t', '--tmpdir', metavar='PATH', help='path to thumbnail parent directory')
-parser.add_argument('-w', '--width', type=int, metavar='INT', help='thumbnail image width in pixel')
+parser.add_argument('-c', '--grid_cols', type=int, metavar='N', help='number of columns in thumbnail preview ')
+parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
+parser.add_argument('-t', '--tmpdir', metavar='path', help='path to thumbnail parent directory')
+parser.add_argument('-i', '--iframe', action="count", help='select only I-frames (the default)')
+parser.add_argument('-f', '--fskip', type=int, metavar='N', help='select only every Nth frame')
+parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold (slow!); 0 < F < 1')
 args = parser.parse_args()
 cfg.vid = args.filename
 cfg.tmpdir = args.tmpdir
@@ -105,8 +112,14 @@ if args.grid_cols:
     cfg.grid_columns = args.grid_cols
 if args.width:
     cfg.thumb_width = args.width
-if args.scene_thresh:
-    cfg.scene_thresh = args.scene_thresh
+if args.scene:
+    cfg.scene_thresh = args.scene
+    cfg.method = 'scene'
+if args.fskip:
+    cfg.frame_skip = args.fskip
+    cfg.method = 'skip'
+if args.iframe:
+    cfg.method = 'iframe'
 
 # prepare thumbnail directory
 if cfg.tmpdir is None:
@@ -156,7 +169,12 @@ def make_thumbs(vidfile, ilabel):
     global proc
     pictemplate = "%08d.png"
     cmd = 'ffmpeg -loglevel info -hide_banner -y -i "' + vidfile + '"'
-    cmd += ' -vf "select=gt(scene\,' + str(cfg.scene_thresh) + ')'
+    if cfg.method == 'scene':
+        cmd += ' -vf "select=gt(scene\,' + str(cfg.scene_thresh) + ')'
+    elif cfg.method == 'skip':
+        cmd += ' -vf "select=not(mod(n\,' + str(cfg.frame_skip) + '))'
+    else:
+        cmd += ' -vf "select=eq(pict_type\,I)'
     cmd += ',showinfo,scale=' + str(cfg.thumb_width) + ':-1"'
     cmd += ' -vsync vfr "' + cfg.tmpdir + '/' + pictemplate + '"'
     eprint(cmd)

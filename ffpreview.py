@@ -7,7 +7,7 @@ Copyright 2021 Urban Wallasch <irrwahn35@freenet.de>
 
 BSD 3-Clause License
 
-Copyright (c) 2018, Urban Wallasch
+Copyright (c) 2021, Urban Wallasch
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -292,8 +292,6 @@ def s2hms(ts):
     return res
 
 def click_thumb(event):
-    num = event.widget.grid_info()["row"] * cfg.grid_columns \
-        + event.widget.grid_info()["column"] + 1
     cmd = 'mpv --start=' + event.widget.cget("text") + ' --pause "' + cfg.vid + '"'
     Popen(cmd, shell=True)
 

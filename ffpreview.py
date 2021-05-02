@@ -276,7 +276,7 @@ def s2hms(ts):
 def click_thumb(event):
     num = event.widget.grid_info()["row"] * cfg.grid_columns \
         + event.widget.grid_info()["column"] + 1
-    cmd = 'mpv --start ' + event.widget.cget("text") + ' --pause "' + cfg.vid + '"'
+    cmd = 'mpv --start=' + event.widget.cget("text") + ' --pause "' + cfg.vid + '"'
     Popen(cmd, shell=True)
 
 try:

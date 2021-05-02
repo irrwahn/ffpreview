@@ -111,7 +111,7 @@ if args.scene_thresh:
 # prepare thumbnail directory
 if cfg.tmpdir is None:
     cfg.tmpdir = tempfile.gettempdir()
-cfg.tmpdir += '/ffpreview_thumbs/' + cfg.vid
+cfg.tmpdir += '/ffpreview_thumbs/' + os.path.basename(cfg.vid)
 try:
     os.makedirs(cfg.tmpdir, exist_ok=True)
 except Exception as e:
@@ -154,12 +154,12 @@ def check_present():
 
 def make_thumbs(vidfile, ilabel):
     global proc
-    pic = cfg.tmpdir + '/%08d.ppm'
+    pictemplate = "%08d.png"
     cmd = 'ffmpeg -loglevel info -hide_banner -y -i "' + vidfile + '"'
     cmd += ' -vf "select=gt(scene\,' + str(cfg.scene_thresh) + ')'
     cmd += ',showinfo,scale=' + str(cfg.thumb_width) + ':-1"'
-    cmd += ' -vsync vfr "' + pic + '"'
-    #eprint(cmd);exit()
+    cmd += ' -vsync vfr "' + cfg.tmpdir + '/' + pictemplate + '"'
+    eprint(cmd)
     ebuf = ''
     i = 1
     try:
@@ -173,7 +173,8 @@ def make_thumbs(vidfile, ilabel):
                     x = re.search("pts_time:\d*\.?\d*", line)
                     if x is not None:
                         t = x.group().split(':')[1]
-                        print("%d %08d.ppm %s" % (i, i, t), file=fidx)
+                        fmt = "%d " + pictemplate + " %s"
+                        print(fmt % (i, i, t), file=fidx)
                         i += 1
                         ilabel.config(text=t.split('.')[0])
                         root.update()
@@ -218,7 +219,6 @@ canvas.create_window((0, 0), window=scrollframe, anchor="nw")
 canvas.configure(yscrollcommand=scrollbar.set)
 
 def mouse_wheel(event):
-    eprint(event)
     direction = 0
     if event.num == 5 or event.delta == -120 or event.keysym == 'Down':
         direction = 1
@@ -288,7 +288,7 @@ try:
             l = line.strip().split(' ')
             i = int(l[0])
             t = l[2]
-            thumb=PhotoImage(file=cfg.tmpdir + '/' + l[1])
+            thumb = PhotoImage(file=cfg.tmpdir + '/' + l[1])
             thumbs.append(thumb)
             tlabel = Label(scrollframe, text=s2hms(t), image=thumb, compound='top', relief="solid")
             tlabel.grid(column=x, row=y)

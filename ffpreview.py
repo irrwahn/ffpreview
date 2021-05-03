@@ -366,14 +366,16 @@ dur = get_duration(cfg.vid)
 thinfo['duration'] = dur
 thinfo['date'] = int(time.time())
 if cfg.force or not chk_idxfile():
-    stale = [f for f in glob.glob(cfg.tmpdir + '/*.png') if re.match('^' + cfg.tmpdir + '/\d{8}\.png$', f)]
-    stale.append(cfg.idxfile)
-    for f in stale:
-        try:
-            os.unlink(f)
-        except Exception as e:
-            #eprint(str(e))
-            pass
+    try:
+        os.unlink(cfg.idxfile)
+    except Exception as e:
+        pass
+    for f in os.listdir(cfg.tmpdir):
+        if re.match('^\d{8}\.png$', f):
+            try:
+                os.unlink(cfg.tmpdir + '/' + f)
+            except Exception as e:
+                pass
     info1 = Label(scrollframe, text='Processed:', width=10, height=5, anchor='e')
     info2 = Label(scrollframe, text='0', width=10, height=5, anchor='e')
     info3 = Label(scrollframe, text='of ' + (str(dur),'(unknown)')[dur<= 0] + ' s', width=12, height=5, anchor='w')

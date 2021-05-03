@@ -68,9 +68,12 @@ def eprint(*args, **kwargs):
 def die():
     global proc
     if proc is not None:
-        eprint("killing subprocess: %s" % proc.args)
-        proc.kill()
-        time.sleep(2)
+        eprint('killing subprocess: %s' % proc.args)
+        proc.terminate()
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
     exit()
 
 def die_ev(event):
@@ -162,7 +165,7 @@ def get_duration(vidfile):
         cmd = 'ffprobe -v error -show_entries'
         cmd += ' format=duration -of default=noprint_wrappers=1:nokey=1'
         cmd += ' "' + vidfile + '"'
-        proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
+        proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
         stdout, stderr = proc.communicate()
         retval = proc.wait()
         proc = None
@@ -225,7 +228,7 @@ def make_thumbs(vidfile, ilabel):
     ebuf = ''
     cnt = 0
     try:
-        proc = Popen(cmd, shell=True, stderr=PIPE)
+        proc = Popen('exec ' + cmd, shell=True, stderr=PIPE)
         while proc.poll() is None:
             line = proc.stderr.readline()
             if line:
@@ -347,8 +350,8 @@ def s2hms(ts):
     return res
 
 def click_thumb(event):
-    cmd = 'mpv --start=' + event.widget.cget("text") + ' --pause "' + cfg.vid + '"'
-    Popen(cmd, shell=True)
+    cmd = 'mpv --start=' + event.widget.cget('text') + ' --pause "' + cfg.vid + '"'
+    Popen('exec ' + cmd, shell=True)
 
 try:
     with open(cfg.idxfile, 'r') as idxfile:

@@ -401,7 +401,7 @@ def s2hms(ts):
     return res
 
 def click_thumb(event):
-    cmd = 'mpv --start=' + event.widget.cget('text') + ' --pause "' + cfg.vid + '"'
+    cmd = 'mpv --no-ordered-chapters --start=' + event.widget.cget('text') + ' --pause "' + cfg.vid + '"'
     Popen('exec ' + cmd, shell=True)
 
 try:

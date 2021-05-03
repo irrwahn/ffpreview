@@ -381,6 +381,7 @@ try:
             if x == cfg.grid_columns:
                 x = 0; y += 1
                 root.update()
+        root.update()
         canvas.configure(yscrollincrement=tlabel.winfo_height())
 except Exception as e:
     eprint(str(e))

@@ -41,7 +41,6 @@ TODO:
 
 * support more ffmpeg select filters?
 * make player configurable?
-* reuse existing index / thumbnail files?
 
 """
 
@@ -56,6 +55,7 @@ import time
 import random
 import tempfile
 import argparse
+import json
 from subprocess import PIPE, Popen
 from tkinter import *
 from inspect import currentframe
@@ -85,8 +85,10 @@ class Config:
 cfg = Config()
 cfg.vid = ''
 cfg.tmpdir = None
+cfg.idxfile = ''
 cfg.grid_columns = 5
 cfg.thumb_width = 128
+cfg.force = False
 cfg.method = 'iframe'
 cfg.frame_skip = None
 cfg.scene_thresh = None
@@ -102,8 +104,9 @@ parser.add_argument('filename', help='input video file')
 parser.add_argument('-c', '--grid_cols', type=int, metavar='N', help='number of columns in thumbnail preview ')
 parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
 parser.add_argument('-t', '--tmpdir', metavar='path', help='path to thumbnail parent directory')
+parser.add_argument('-f', '--force', action="count", help='force rebuilding thumbnails and index')
 parser.add_argument('-i', '--iframe', action="count", help='select only I-frames (the default)')
-parser.add_argument('-f', '--fskip', type=int, metavar='N', help='select only every Nth frame')
+parser.add_argument('-n', '--nskip', type=int, metavar='N', help='select only every Nth frame')
 parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold (slow!); 0 < F < 1')
 args = parser.parse_args()
 cfg.vid = args.filename
@@ -112,11 +115,13 @@ if args.grid_cols:
     cfg.grid_columns = args.grid_cols
 if args.width:
     cfg.thumb_width = args.width
+if args.force:
+    cfg.force = True
 if args.scene:
     cfg.scene_thresh = args.scene
     cfg.method = 'scene'
-if args.fskip:
-    cfg.frame_skip = args.fskip
+if args.nskip:
+    cfg.frame_skip = args.nskip
     cfg.method = 'skip'
 if args.iframe:
     cfg.method = 'iframe'
@@ -133,11 +138,25 @@ except Exception as e:
 cfg.idxfile = cfg.tmpdir + '/ffpreview.idx'
 
 
+# Initialize thumbnail info structure
+thinfo = {
+    'name': os.path.basename(cfg.vid),
+    'duration': -1,
+    'count': 0,
+    'width': cfg.thumb_width,
+    'method': cfg.method,
+    'frame_skip': cfg.frame_skip,
+    'scene_thresh': cfg.scene_thresh,
+    'date':0,
+    'th':[]
+}
+
+
 ############################################################
 # try to get video container duration
 
 def get_duration(vidfile):
-    duration = '(unknown)'
+    duration = "-1"
     global proc
     try:
         cmd = 'ffprobe -v error -show_entries'
@@ -154,13 +173,38 @@ def get_duration(vidfile):
             eprint(stderr.decode())
     except Exception as e:
         eprint(str(e))
-    return duration
+    return int(duration)
 
-"""
-def check_present():
-    # TODO: check existing index & thumbs?
-    return '0'
-"""
+
+############################################################
+# check validity of existing index file
+
+def chk_idxfile():
+    global thinfo
+    try:
+        with open(cfg.idxfile, 'r') as idxfile:
+            chk = json.load(idxfile)
+            if chk['name'] != thinfo['name']:
+                return False
+            if chk['duration'] != thinfo['duration']:
+                return False
+            if chk['width'] != thinfo['width']:
+                return False
+            if chk['method'] != thinfo['method']:
+                return False
+            if chk['frame_skip'] != thinfo['frame_skip']:
+                return False
+            if chk['scene_thresh'] != thinfo['scene_thresh']:
+                return False
+            if chk['count'] != len(chk['th']):
+                return False
+            # do something with date?
+            thinfo = chk
+            return True
+    except Exception as e:
+        pass
+    return False
+
 
 ############################################################
 # extract thumbnails from video and collect timestamps
@@ -179,29 +223,30 @@ def make_thumbs(vidfile, ilabel):
     cmd += ' -vsync vfr "' + cfg.tmpdir + '/' + pictemplate + '"'
     eprint(cmd)
     ebuf = ''
-    i = 1
+    cnt = 0
     try:
-        with open(cfg.idxfile, 'w') as fidx:
-            proc = Popen(cmd, shell=True, stderr=PIPE)
-            while proc.poll() is None:
-                line = proc.stderr.readline()
-                if line:
-                    line = line.decode()
-                    ebuf += line
-                    x = re.search("pts_time:\d*\.?\d*", line)
-                    if x is not None:
-                        t = x.group().split(':')[1]
-                        fmt = "%d " + pictemplate + " %s"
-                        print(fmt % (i, i, t), file=fidx)
-                        i += 1
-                        ilabel.config(text=t.split('.')[0])
-                        root.update()
-            retval = proc.wait()
-            proc = None
-            if retval != 0:
-                eprint(ebuf)
-                eprint("ffmpeg exit code: %d" % retval)
-                exit(retval)
+        proc = Popen(cmd, shell=True, stderr=PIPE)
+        while proc.poll() is None:
+            line = proc.stderr.readline()
+            if line:
+                line = line.decode()
+                ebuf += line
+                x = re.search('pts_time:\d*\.?\d*', line)
+                if x is not None:
+                    cnt += 1
+                    t = x.group().split(':')[1]
+                    thinfo['th'].append([ cnt, pictemplate % cnt, t ])
+                    ilabel.config(text=t.split('.')[0])
+                    root.update()
+        retval = proc.wait()
+        proc = None
+        if retval != 0:
+            eprint(ebuf)
+            eprint('ffmpeg exit code: %d' % retval)
+            exit(retval)
+        thinfo['count'] = cnt
+        with open(cfg.idxfile, 'w') as idxfile:
+            json.dump(thinfo, idxfile, indent=2)
     except Exception as e:
         eprint(str(e))
         exit(1)
@@ -261,28 +306,37 @@ def unbind_mousewheel(event):
 scrollframe.bind('<Enter>', bind_mousewheel)
 scrollframe.bind('<Leave>', unbind_mousewheel)
 
-info1 = Label(scrollframe, text="Processed:", width=10, height=5, anchor="e")
-info2 = Label(scrollframe, text="0", width=10, height=5, anchor="e")
-info3 = Label(scrollframe, text="", width=12, height=5, anchor="w")
-info1.pack(side=LEFT)
-info2.pack(side=LEFT)
-info3.pack(side=LEFT)
+############################################################
+# rebuild thumbnails and index, if necessary
 
-# do the heavy lifting
 proc = None
-info3.config(text = 'of ' + get_duration(cfg.vid) + ' s')
-root.update()
-#check_present()
-make_thumbs(cfg.vid, info2)
+dur = get_duration(cfg.vid)
+thinfo['duration'] = dur
+thinfo['date'] = int(time.time())
+if cfg.force or not chk_idxfile():
+    stale = [f for f in glob.glob(cfg.tmpdir + '/*.png') if re.match('^' + cfg.tmpdir + '/\d{8}\.png$', f)]
+    stale.append(cfg.idxfile)
+    for f in stale:
+        try:
+            os.unlink(f)
+        except Exception as e:
+            eprint(str(e))
+    info1 = Label(scrollframe, text='Processed:', width=10, height=5, anchor='e')
+    info2 = Label(scrollframe, text='0', width=10, height=5, anchor='e')
+    info3 = Label(scrollframe, text='of ' + (str(dur),'(unknown)')[dur<= 0] + ' s', width=12, height=5, anchor='w')
+    info1.pack(side=LEFT)
+    info2.pack(side=LEFT)
+    info3.pack(side=LEFT)
+    root.update()
+    make_thumbs(cfg.vid, info2)
+    info1.destroy()
+    info2.destroy()
+    info3.destroy()
+    root.update()
 
 
 ############################################################
 # generate clickable thumbnail labels
-
-info1.destroy()
-info2.destroy()
-info3.destroy()
-root.update()
 
 def s2hms(ts):
     s, ms = divmod(float(ts), 1.0)
@@ -296,17 +350,14 @@ def click_thumb(event):
     Popen(cmd, shell=True)
 
 try:
-    with open(cfg.idxfile, 'r') as fidx:
+    with open(cfg.idxfile, 'r') as idxfile:
+        idx = json.load(idxfile)
         thumbs=[]
-        idx = fidx.readlines()
         x = 0; y = 0
-        for line in idx:
-            l = line.strip().split(' ')
-            i = int(l[0])
-            t = l[2]
-            thumb = PhotoImage(file=cfg.tmpdir + '/' + l[1])
+        for th in idx['th']:
+            thumb = PhotoImage(file=cfg.tmpdir + '/' + th[1])
             thumbs.append(thumb)
-            tlabel = Label(scrollframe, text=s2hms(t), image=thumb, compound='top', relief="solid")
+            tlabel = Label(scrollframe, text=s2hms(th[2]), image=thumb, compound='top', relief='solid')
             tlabel.grid(column=x, row=y)
             tlabel.bind("<Button-1>", click_thumb)
             x += 1

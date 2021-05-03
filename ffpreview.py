@@ -104,6 +104,7 @@ cfg.thumb_width = 128
 cfg.force = False
 cfg.method = 'iframe'
 cfg.frame_skip = None
+cfg.time_skip = None
 cfg.scene_thresh = None
 #cfg.startts = '0'
 
@@ -111,7 +112,7 @@ cfg.scene_thresh = None
 # parse command line arguments
 parser = argparse.ArgumentParser(
     description='Generate clickable video thumbnail preview.',
-    epilog='The -i, -n and -s options are mutually exclusive, -i beats -n beats -s.'
+    epilog='The -i, -N, -n and -s options are mutually exclusive, -i beats -N beats -n beats -s.'
 )
 parser.add_argument('filename', help='input video file')
 parser.add_argument('-c', '--grid_cols', type=int, metavar='N', help='number of columns in thumbnail preview ')
@@ -120,6 +121,7 @@ parser.add_argument('-t', '--tmpdir', metavar='path', help='path to thumbnail pa
 parser.add_argument('-f', '--force', action='count', help='force rebuilding thumbnails and index')
 parser.add_argument('-i', '--iframe', action='count', help='select only I-frames (the default)')
 parser.add_argument('-n', '--nskip', type=int, metavar='N', help='select only every Nth frame')
+parser.add_argument('-N', '--nsecs', type=int, metavar='F', help='select one frame every F seconds')
 parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold (slow!); 0 < F < 1')
 args = parser.parse_args()
 cfg.vid = args.filename
@@ -137,7 +139,13 @@ if args.nskip:
     cfg.frame_skip = args.nskip
     cfg.scene_thresh = None
     cfg.method = 'skip'
+if args.nsecs:
+    cfg.time_skip = args.nsecs
+    cfg.frame_skip = None
+    cfg.scene_thresh = None
+    cfg.method = 'time'
 if args.iframe:
+    cfg.time_skip = None
     cfg.frame_skip = None
     cfg.scene_thresh = None
     cfg.method = 'iframe'
@@ -158,10 +166,12 @@ cfg.idxfile = cfg.tmpdir + '/ffpreview.idx'
 thinfo = {
     'name': os.path.basename(cfg.vid),
     'duration': -1,
+    'fps': -1,
     'count': 0,
     'width': cfg.thumb_width,
     'method': cfg.method,
     'frame_skip': cfg.frame_skip,
+    'time_skip': cfg.time_skip,
     'scene_thresh': cfg.scene_thresh,
     'date':0,
     'th':[]
@@ -171,25 +181,28 @@ thinfo = {
 ############################################################
 # try to get video container duration
 
-def get_duration(vidfile):
-    duration = '-1'
+def get_meta(vidfile):
+    meta = { 'duration':-1, 'fps':-1.0 }
     global proc
     try:
-        cmd = 'ffprobe -v error -show_entries'
-        cmd += ' format=duration -of default=noprint_wrappers=1:nokey=1'
+        cmd = 'ffprobe -v error -select_streams v -of json'
+        cmd += ' -show_entries format=duration:stream=avg_frame_rate'
         cmd += ' "' + vidfile + '"'
         proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
         stdout, stderr = proc.communicate()
         retval = proc.wait()
         proc = None
         if retval == 0:
-            duration = stdout.decode().split('.')[0]
+            info = json.loads(stdout.decode())
+            fr = info['streams'][0]['avg_frame_rate'].split('/')
+            meta['fps'] = round(float(fr[0]) / float(fr[1]), 2)
+            meta['duration'] = int(info['format']['duration'].split('.')[0])
         else:
             eprint('ffprobe:')
             eprint(stderr.decode())
     except Exception as e:
         eprint(str(e))
-    return int(duration)
+    return meta
 
 
 ############################################################
@@ -233,7 +246,10 @@ def make_thumbs(vidfile, ilabel):
         cmd += ' -vf "select=gt(scene\,' + str(cfg.scene_thresh) + ')'
     elif cfg.method == 'skip':
         cmd += ' -vf "select=not(mod(n\,' + str(cfg.frame_skip) + '))'
-    else:
+    elif cfg.method == 'time':
+        fs = int(float(cfg.time_skip) * float(thinfo['fps']))
+        cmd += ' -vf "select=not(mod(n\,' + str(fs) + '))'
+    else: # iframe
         cmd += ' -vf "select=eq(pict_type\,I)'
     cmd += ',showinfo,scale=' + str(cfg.thumb_width) + ':-1"'
     cmd += ' -vsync vfr "' + cfg.tmpdir + '/' + pictemplate + '"'
@@ -362,8 +378,7 @@ canvas.bind_all('<Next>', page_scroll) # PageDn key
 # rebuild thumbnails and index, if necessary
 
 proc = None
-dur = get_duration(cfg.vid)
-thinfo['duration'] = dur
+thinfo.update(get_meta(cfg.vid))
 thinfo['date'] = int(time.time())
 if cfg.force or not chk_idxfile():
     try:
@@ -378,7 +393,8 @@ if cfg.force or not chk_idxfile():
                 pass
     info1 = Label(scrollframe, text='Processed:', width=10, height=5, anchor='e')
     info2 = Label(scrollframe, text='0', width=10, height=5, anchor='e')
-    info3 = Label(scrollframe, text='of ' + (str(dur),'(unknown)')[dur<= 0] + ' s', width=12, height=5, anchor='w')
+    info3 = Label(scrollframe, text='of ' + (str(thinfo['duration']),'(unknown)')[thinfo['duration']<= 0] + ' s',
+                    width=12, height=5, anchor='w')
     info1.pack(side=LEFT)
     info2.pack(side=LEFT)
     info3.pack(side=LEFT)

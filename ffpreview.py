@@ -373,6 +373,7 @@ try:
     with open(cfg.idxfile, 'r') as idxfile:
         idx = json.load(idxfile)
         thumbs=[]
+        tlabels=[]
         x = 0; y = 0
         for th in idx['th']:
             thumb = PhotoImage(file=cfg.tmpdir + '/' + th[1])
@@ -380,22 +381,42 @@ try:
             tlabel = Label(scrollframe, text=s2hms(th[2]), image=thumb, compound='top', relief='solid')
             tlabel.grid(column=x, row=y)
             tlabel.bind('<Button-1>', click_thumb)
+            tlabels.append(tlabel)
             x += 1
             if x == cfg.grid_columns:
                 x = 0; y += 1
                 root.update()
-        root.update()
-        canvas.configure(yscrollincrement=tlabel.winfo_height())
 except Exception as e:
     eprint(str(e))
     exit(2)
+
+
+def on_resize(event):
+    lw = tlabels[0].winfo_width()
+    cols = cfg.grid_columns
+    cw = cols * lw
+    rw = root.winfo_width() - scrollbar.winfo_width()
+    if rw < cw and cols > 1:
+        cols -= 1
+    elif rw > cw + lw:
+        cols += 1
+    if cols != cfg.grid_columns:
+        cfg.grid_columns = cols
+        x = 0; y = 0
+        for tl in tlabels:
+            tl.grid(column=x, row=y)
+            x += 1
+            if x == cols:
+                x = 0; y += 1
 
 
 ############################################################
 # fix window geometry, start main loop
 
 root.update()
+canvas.configure(yscrollincrement=tlabels[0].winfo_height())
 root.geometry('%dx%d' % (scrollframe.winfo_width() + scrollbar.winfo_width(), 600) )
+root.bind("<Configure>", on_resize)
 root.mainloop()
 
 # EOF

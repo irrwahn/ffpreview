@@ -62,7 +62,7 @@ from inspect import currentframe
 
 
 def eprint(*args, **kwargs):
-    print("LINE %d: " % currentframe().f_back.f_lineno, file=sys.stderr, end = '')
+    print('LINE %d: ' % currentframe().f_back.f_lineno, file=sys.stderr, end = '')
     print(*args, file=sys.stderr, **kwargs)
 
 def die():
@@ -98,14 +98,14 @@ cfg.scene_thresh = None
 # parse command line arguments
 parser = argparse.ArgumentParser(
     description='Generate clickable video thumbnail preview.',
-    epilog="The -i, -f and -s options are mutually exclusive, the last one specified wins."
+    epilog='The -i, -f and -s options are mutually exclusive, the last one specified wins.'
 )
 parser.add_argument('filename', help='input video file')
 parser.add_argument('-c', '--grid_cols', type=int, metavar='N', help='number of columns in thumbnail preview ')
 parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
 parser.add_argument('-t', '--tmpdir', metavar='path', help='path to thumbnail parent directory')
-parser.add_argument('-f', '--force', action="count", help='force rebuilding thumbnails and index')
-parser.add_argument('-i', '--iframe', action="count", help='select only I-frames (the default)')
+parser.add_argument('-f', '--force', action='count', help='force rebuilding thumbnails and index')
+parser.add_argument('-i', '--iframe', action='count', help='select only I-frames (the default)')
 parser.add_argument('-n', '--nskip', type=int, metavar='N', help='select only every Nth frame')
 parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold (slow!); 0 < F < 1')
 args = parser.parse_args()
@@ -156,7 +156,7 @@ thinfo = {
 # try to get video container duration
 
 def get_duration(vidfile):
-    duration = "-1"
+    duration = '-1'
     global proc
     try:
         cmd = 'ffprobe -v error -show_entries'
@@ -211,7 +211,7 @@ def chk_idxfile():
 
 def make_thumbs(vidfile, ilabel):
     global proc
-    pictemplate = "%08d.png"
+    pictemplate = '%08d.png'
     cmd = 'ffmpeg -loglevel info -hide_banner -y -i "' + vidfile + '"'
     if cfg.method == 'scene':
         cmd += ' -vf "select=gt(scene\,' + str(cfg.scene_thresh) + ')'
@@ -262,23 +262,23 @@ root.bind('<Control-w>', die_ev)
 root.bind('<Control-q>', die_ev)
 
 container = Frame(root)
-container.pack(fill="both", expand=True)
+container.pack(fill='both', expand=True)
 
 canvas = Canvas(container)
-canvas.pack(side="left", fill="both", expand=True)
+canvas.pack(side='left', fill='both', expand=True)
 
-scrollbar = Scrollbar(container, orient="vertical", command=canvas.yview)
-scrollbar.pack(side="right", fill="y")
+scrollbar = Scrollbar(container, orient='vertical', command=canvas.yview)
+scrollbar.pack(side='right', fill='y')
 
 scrollframe = Frame(canvas)
 scrollframe.bind(
-    "<Configure>",
+    '<Configure>',
     lambda e: canvas.configure(
-        scrollregion=canvas.bbox("all")
+        scrollregion=canvas.bbox('all')
     )
 )
 
-canvas.create_window((0, 0), window=scrollframe, anchor="nw")
+canvas.create_window((0, 0), window=scrollframe, anchor='nw')
 canvas.configure(yscrollcommand=scrollbar.set)
 
 def mouse_wheel(event):
@@ -287,21 +287,21 @@ def mouse_wheel(event):
         direction = 1
     if event.num == 4 or event.delta == 120 or event.keysym == 'Up':
         direction = -1
-    canvas.yview_scroll(direction, "units")
+    canvas.yview_scroll(direction, 'units')
 
 def bind_mousewheel(event):
-    canvas.bind_all("<MouseWheel>", mouse_wheel) # Windows mouse wheel event
-    canvas.bind_all("<Button-4>", mouse_wheel) # Linux mouse wheel event (Up)
-    canvas.bind_all("<Button-5>", mouse_wheel) # Linux mouse wheel event (Down)
-    canvas.bind_all("<Up>", mouse_wheel) # Cursor up key
-    canvas.bind_all("<Down>", mouse_wheel) # Cursor down key
+    canvas.bind_all('<MouseWheel>', mouse_wheel) # Windows mouse wheel event
+    canvas.bind_all('<Button-4>', mouse_wheel) # Linux mouse wheel event (Up)
+    canvas.bind_all('<Button-5>', mouse_wheel) # Linux mouse wheel event (Down)
+    canvas.bind_all('<Up>', mouse_wheel) # Cursor up key
+    canvas.bind_all('<Down>', mouse_wheel) # Cursor down key
 
 def unbind_mousewheel(event):
-    canvas.unbind_all("<MouseWheel>")
-    canvas.unbind_all("<Button-4>")
-    canvas.unbind_all("<Button-5>")
-    canvas.unbind_all("<Up>")
-    canvas.unbind_all("<Down>")
+    canvas.unbind_all('<MouseWheel>')
+    canvas.unbind_all('<Button-4>')
+    canvas.unbind_all('<Button-5>')
+    canvas.unbind_all('<Up>')
+    canvas.unbind_all('<Down>')
 
 scrollframe.bind('<Enter>', bind_mousewheel)
 scrollframe.bind('<Leave>', unbind_mousewheel)
@@ -320,7 +320,8 @@ if cfg.force or not chk_idxfile():
         try:
             os.unlink(f)
         except Exception as e:
-            eprint(str(e))
+            #eprint(str(e))
+            pass
     info1 = Label(scrollframe, text='Processed:', width=10, height=5, anchor='e')
     info2 = Label(scrollframe, text='0', width=10, height=5, anchor='e')
     info3 = Label(scrollframe, text='of ' + (str(dur),'(unknown)')[dur<= 0] + ' s', width=12, height=5, anchor='w')
@@ -342,7 +343,7 @@ def s2hms(ts):
     s, ms = divmod(float(ts), 1.0)
     m, s = divmod(s, 60)
     h, m = divmod(m, 60)
-    res = "%d:%02d:%02d%s" % (h, m, s, ("%.3f" % ms).lstrip('0'))
+    res = '%d:%02d:%02d%s' % (h, m, s, ('%.3f' % ms).lstrip('0'))
     return res
 
 def click_thumb(event):
@@ -359,7 +360,7 @@ try:
             thumbs.append(thumb)
             tlabel = Label(scrollframe, text=s2hms(th[2]), image=thumb, compound='top', relief='solid')
             tlabel.grid(column=x, row=y)
-            tlabel.bind("<Button-1>", click_thumb)
+            tlabel.bind('<Button-1>', click_thumb)
             x += 1
             if x == cfg.grid_columns:
                 x = 0; y += 1
@@ -373,7 +374,7 @@ except Exception as e:
 # fix window geometry, start main loop
 
 root.update()
-root.geometry("%dx%d" % (scrollframe.winfo_width() + scrollbar.winfo_width(), 600) )
+root.geometry('%dx%d' % (scrollframe.winfo_width() + scrollbar.winfo_width(), 600) )
 root.mainloop()
 
 # EOF

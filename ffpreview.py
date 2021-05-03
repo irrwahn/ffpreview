@@ -101,7 +101,7 @@ cfg.scene_thresh = None
 # parse command line arguments
 parser = argparse.ArgumentParser(
     description='Generate clickable video thumbnail preview.',
-    epilog='The -i, -f and -s options are mutually exclusive, the last one specified wins.'
+    epilog='The -i, -n and -s options are mutually exclusive, -i beats -n beats -s.'
 )
 parser.add_argument('filename', help='input video file')
 parser.add_argument('-c', '--grid_cols', type=int, metavar='N', help='number of columns in thumbnail preview ')
@@ -125,8 +125,11 @@ if args.scene:
     cfg.method = 'scene'
 if args.nskip:
     cfg.frame_skip = args.nskip
+    cfg.scene_thresh = None
     cfg.method = 'skip'
 if args.iframe:
+    cfg.frame_skip = None
+    cfg.scene_thresh = None
     cfg.method = 'iframe'
 
 # prepare thumbnail directory

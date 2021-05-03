@@ -415,6 +415,7 @@ try:
             tlabel = Label(scrollframe, text=s2hms(th[2]), image=thumb, compound='top', relief='solid')
             tlabel.bind('<Button-1>', click_thumb)
             tlabels.append(tlabel)
+        root.title(root.title() + ' [%d]' % thinfo["count"])
 except Exception as e:
     eprint(str(e))
     exit(2)

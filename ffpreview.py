@@ -284,30 +284,43 @@ scrollframe.bind(
 canvas.create_window((0, 0), window=scrollframe, anchor='nw')
 canvas.configure(yscrollcommand=scrollbar.set)
 
+def page_scroll(event):
+    if event.keysym == 'Next':
+        canvas.yview_scroll(1, 'pages')
+    if event.keysym == 'Prior':
+        canvas.yview_scroll(-1, 'pages')
+
+def home_end_scroll(event):
+    if event.keysym == 'Home':
+        canvas.yview_moveto(0)
+    if event.keysym == 'End':
+        canvas.yview_moveto(1)
+
 def mouse_wheel(event):
-    direction = 0
     if event.num == 5 or event.delta == -120 or event.keysym == 'Down':
-        direction = 1
+        canvas.yview_scroll(1, 'units')
     if event.num == 4 or event.delta == 120 or event.keysym == 'Up':
-        direction = -1
-    canvas.yview_scroll(direction, 'units')
+        canvas.yview_scroll(-1, 'units')
 
 def bind_mousewheel(event):
     canvas.bind_all('<MouseWheel>', mouse_wheel) # Windows mouse wheel event
     canvas.bind_all('<Button-4>', mouse_wheel) # Linux mouse wheel event (Up)
     canvas.bind_all('<Button-5>', mouse_wheel) # Linux mouse wheel event (Down)
-    canvas.bind_all('<Up>', mouse_wheel) # Cursor up key
-    canvas.bind_all('<Down>', mouse_wheel) # Cursor down key
 
 def unbind_mousewheel(event):
     canvas.unbind_all('<MouseWheel>')
     canvas.unbind_all('<Button-4>')
     canvas.unbind_all('<Button-5>')
-    canvas.unbind_all('<Up>')
-    canvas.unbind_all('<Down>')
 
 scrollframe.bind('<Enter>', bind_mousewheel)
 scrollframe.bind('<Leave>', unbind_mousewheel)
+canvas.bind_all('<Up>', mouse_wheel) # CursorUp key
+canvas.bind_all('<Down>', mouse_wheel) # CursorDown key
+canvas.bind_all('<Home>', home_end_scroll) # Home key
+canvas.bind_all('<End>', home_end_scroll) # End key
+canvas.bind_all('<Prior>', page_scroll) # PageUp key
+canvas.bind_all('<Next>', page_scroll) # PageDn key
+
 
 ############################################################
 # rebuild thumbnails and index, if necessary
@@ -368,6 +381,7 @@ try:
             if x == cfg.grid_columns:
                 x = 0; y += 1
                 root.update()
+        canvas.configure(yscrollincrement=tlabel.winfo_height())
 except Exception as e:
     eprint(str(e))
     exit(2)

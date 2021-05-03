@@ -271,8 +271,31 @@ def make_thumbs(vidfile, ilabel):
 ############################################################
 # initialize window
 
-root = Tk()
-root.wm_title(cfg.vid)
+ffpreview_png = '''
+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
+Ut0AAAAASUVORK5CYII=
+'''
+
+root = Tk(className='ffpreview')
+root.title('ffpreview - '+ cfg.vid)
+ffpreview_ico = PhotoImage(data=ffpreview_png)
+root.iconphoto(False, ffpreview_ico)
 root.bind('<Escape>', die_ev)
 root.bind('<Control-w>', die_ev)
 root.bind('<Control-q>', die_ev)
@@ -325,8 +348,8 @@ def unbind_mousewheel(event):
     canvas.unbind_all('<Button-4>')
     canvas.unbind_all('<Button-5>')
 
-scrollframe.bind('<Enter>', bind_mousewheel)
-scrollframe.bind('<Leave>', unbind_mousewheel)
+canvas.bind('<Enter>', bind_mousewheel)
+canvas.bind('<Leave>', unbind_mousewheel)
 canvas.bind_all('<Up>', mouse_wheel) # CursorUp key
 canvas.bind_all('<Down>', mouse_wheel) # CursorDown key
 canvas.bind_all('<Home>', home_end_scroll) # Home key
@@ -400,9 +423,11 @@ except Exception as e:
     eprint(str(e))
     exit(2)
 
+tlwidth = tlabels[0].winfo_width()
+tlheight = tlabels[0].winfo_height()
 
 def on_resize(event):
-    lw = tlabels[0].winfo_width()
+    lw = tlwidth
     cols = cfg.grid_columns
     cw = cols * lw
     rw = root.winfo_width() - scrollbar.winfo_width()
@@ -424,8 +449,9 @@ def on_resize(event):
 # fix window geometry, start main loop
 
 root.update()
-canvas.configure(yscrollincrement=tlabels[0].winfo_height())
+canvas.configure(yscrollincrement=tlheight)
 root.geometry('%dx%d' % (scrollframe.winfo_width() + scrollbar.winfo_width(), 600) )
+root.minsize(tlwidth, tlheight)
 root.bind("<Configure>", on_resize)
 root.mainloop()
 

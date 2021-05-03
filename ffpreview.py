@@ -79,6 +79,16 @@ def die():
 def die_ev(event):
     die()
 
+def sigint_handler(signum, frame):
+    eprint('ffpreview caught signal %d, exiting.' % signum)
+    die()
+
+signal.signal(signal.SIGHUP, sigint_handler)
+signal.signal(signal.SIGINT, sigint_handler)
+signal.signal(signal.SIGQUIT, sigint_handler)
+signal.signal(signal.SIGTERM, sigint_handler)
+signal.signal(signal.SIGPIPE, signal.SIG_IGN)
+
 
 ############################################################
 # configuration

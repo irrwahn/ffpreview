@@ -375,6 +375,17 @@ container.bind_all('<End>', home_end_scroll) # End key
 container.bind_all('<Prior>', page_scroll) # PageUp key
 container.bind_all('<Next>', page_scroll) # PageDn key
 
+ilabel = [
+    Label(scrollframe, text='Generating view ...', width=15, height=2, anchor='w'),
+    Label(scrollframe, text='', width=15, height=2, anchor='w'),
+    Label(scrollframe, text='', width=10, height=2, anchor='e'),
+    Label(scrollframe, text='', width=12, height=2, anchor='w')
+]
+ilabel[0].grid(column=0, row=0)
+ilabel[1].grid(column=0, row=1)
+ilabel[2].grid(column=1, row=1)
+ilabel[3].grid(column=2, row=1)
+root.update()
 
 ############################################################
 # rebuild thumbnails and index, if necessary
@@ -393,19 +404,9 @@ if cfg.force or not chk_idxfile():
                 os.unlink(cfg.tmpdir + '/' + f)
             except Exception as e:
                 pass
-    info1 = Label(scrollframe, text='Processed:', width=10, height=5, anchor='e')
-    info2 = Label(scrollframe, text='0', width=10, height=5, anchor='e')
-    info3 = Label(scrollframe, text='of ' + (str(thinfo['duration']),'(unknown)')[thinfo['duration']<= 0] + ' s',
-                    width=12, height=5, anchor='w')
-    info1.pack(side=LEFT)
-    info2.pack(side=LEFT)
-    info3.pack(side=LEFT)
-    root.update()
-    make_thumbs(cfg.vid, info2)
-    info1.destroy()
-    info2.destroy()
-    info3.destroy()
-    root.update()
+    ilabel[1].config(text='Processing'),
+    ilabel[3].config(text='of ' + (str(thinfo['duration']),'(unknown)')[thinfo['duration']<= 0] + ' s')
+    make_thumbs(cfg.vid, ilabel[2])
 
 
 ############################################################
@@ -427,7 +428,12 @@ try:
         idx = json.load(idxfile)
         thumbs=[]
         tlabels=[]
+        ilabel[1].config(text='Loading')
+        ilabel[3].config(text='of ' + str(thinfo['count']))
         for th in idx['th']:
+            if th[0] % 100 == 0:
+                ilabel[2].config(text=str(th[0]))
+                root.update()
             thumb = PhotoImage(file=cfg.tmpdir + '/' + th[1])
             thumbs.append(thumb)
             tlabel = Label(scrollframe, text=s2hms(th[2]), image=thumb, compound='top', relief='solid')
@@ -461,11 +467,12 @@ def on_resize(event):
         cfg.grid_columns = cols
         fill_grid(cols)
 
-
 ############################################################
 # fix window geometry, start main loop
 
 fill_grid(cfg.grid_columns)
+for il in ilabel:
+    il.destroy()
 root.update()
 tlwidth = tlabels[0].winfo_width()
 tlheight = tlabels[0].winfo_height()

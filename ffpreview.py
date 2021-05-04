@@ -338,28 +338,24 @@ scrollframe.bind(
 canvas.create_window((0, 0), window=scrollframe, anchor='nw')
 canvas.configure(yscrollcommand=scrollbar.set)
 
-def page_scroll(event):
+def on_scroll(event):
     if event.keysym == 'Next':
         canvas.yview_scroll(1, 'pages')
-    if event.keysym == 'Prior':
+    elif event.keysym == 'Prior':
         canvas.yview_scroll(-1, 'pages')
-
-def home_end_scroll(event):
-    if event.keysym == 'Home':
+    elif event.keysym == 'Home':
         canvas.yview_moveto(0)
-    if event.keysym == 'End':
+    elif event.keysym == 'End':
         canvas.yview_moveto(1)
-
-def mouse_wheel(event):
-    if event.num == 5 or event.delta == -120 or event.keysym == 'Down':
+    elif event.num == 5 or event.delta == -120 or event.keysym == 'Down':
         canvas.yview_scroll(1, 'units')
-    if event.num == 4 or event.delta == 120 or event.keysym == 'Up':
+    elif event.num == 4 or event.delta == 120 or event.keysym == 'Up':
         canvas.yview_scroll(-1, 'units')
 
 def bind_mousewheel(event):
-    canvas.bind_all('<MouseWheel>', mouse_wheel) # Windows mouse wheel event
-    canvas.bind_all('<Button-4>', mouse_wheel) # Linux mouse wheel event (Up)
-    canvas.bind_all('<Button-5>', mouse_wheel) # Linux mouse wheel event (Down)
+    canvas.bind_all('<MouseWheel>', on_scroll) # Windows mouse wheel event
+    canvas.bind_all('<Button-4>', on_scroll) # Linux mouse wheel event (Up)
+    canvas.bind_all('<Button-5>', on_scroll) # Linux mouse wheel event (Down)
 
 def unbind_mousewheel(event):
     canvas.unbind_all('<MouseWheel>')
@@ -368,12 +364,12 @@ def unbind_mousewheel(event):
 
 container.bind_all('<Enter>', bind_mousewheel)
 container.bind_all('<Leave>', unbind_mousewheel)
-container.bind_all('<Up>', mouse_wheel) # CursorUp key
-container.bind_all('<Down>', mouse_wheel) # CursorDown key
-container.bind_all('<Home>', home_end_scroll) # Home key
-container.bind_all('<End>', home_end_scroll) # End key
-container.bind_all('<Prior>', page_scroll) # PageUp key
-container.bind_all('<Next>', page_scroll) # PageDn key
+container.bind_all('<Up>', on_scroll)    # CursorUp key
+container.bind_all('<Down>', on_scroll)  # CursorDown key
+container.bind_all('<Home>', on_scroll)  # Home key
+container.bind_all('<End>', on_scroll)   # End key
+container.bind_all('<Prior>', on_scroll) # PageUp key
+container.bind_all('<Next>', on_scroll)  # PageDn key
 
 ilabel = [
     Label(scrollframe, text='Generating view ...', width=15, height=2, anchor='w'),

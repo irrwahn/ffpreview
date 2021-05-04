@@ -102,6 +102,7 @@ cfg.tmpdir = None
 cfg.idxfile = ''
 cfg.grid_columns = 5
 cfg.thumb_width = 128
+cfg.hightlightcolor="lightsteelblue1"
 cfg.force = False
 cfg.method = 'iframe'
 cfg.frame_skip = None
@@ -431,6 +432,8 @@ try:
             thumbs.append(thumb)
             tlabel = Label(scrollframe, text=s2hms(th[2]), image=thumb, compound='top', relief='solid')
             tlabel.bind('<Button-1>', click_thumb)
+            tlabel.bind("<Enter>", lambda event: event.widget.config(bg=cfg.hightlightcolor))
+            tlabel.bind("<Leave>", lambda event: event.widget.config(bg=scrollframe["background"]))
             tlabels.append(tlabel)
         root.title(root.title() + ' [%d]' % thinfo["count"])
 except Exception as e:

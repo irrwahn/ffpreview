@@ -58,6 +58,7 @@ import argparse
 import json
 from subprocess import PIPE, Popen
 from tkinter import *
+from tkinter import ttk
 from inspect import currentframe
 
 
@@ -322,7 +323,7 @@ container.pack(fill='both', expand=True)
 canvas = Canvas(container)
 canvas.pack(side='left', fill='both', expand=True)
 
-scrollbar = Scrollbar(container, orient='vertical', command=canvas.yview)
+scrollbar = ttk.Scrollbar(container, orient='vertical', command=canvas.yview)
 scrollbar.pack(side='right', fill='y')
 
 scrollframe = Frame(canvas)
@@ -364,14 +365,14 @@ def unbind_mousewheel(event):
     canvas.unbind_all('<Button-4>')
     canvas.unbind_all('<Button-5>')
 
-canvas.bind('<Enter>', bind_mousewheel)
-canvas.bind('<Leave>', unbind_mousewheel)
-canvas.bind_all('<Up>', mouse_wheel) # CursorUp key
-canvas.bind_all('<Down>', mouse_wheel) # CursorDown key
-canvas.bind_all('<Home>', home_end_scroll) # Home key
-canvas.bind_all('<End>', home_end_scroll) # End key
-canvas.bind_all('<Prior>', page_scroll) # PageUp key
-canvas.bind_all('<Next>', page_scroll) # PageDn key
+container.bind_all('<Enter>', bind_mousewheel)
+container.bind_all('<Leave>', unbind_mousewheel)
+container.bind_all('<Up>', mouse_wheel) # CursorUp key
+container.bind_all('<Down>', mouse_wheel) # CursorDown key
+container.bind_all('<Home>', home_end_scroll) # Home key
+container.bind_all('<End>', home_end_scroll) # End key
+container.bind_all('<Prior>', page_scroll) # PageUp key
+container.bind_all('<Next>', page_scroll) # PageDn key
 
 
 ############################################################

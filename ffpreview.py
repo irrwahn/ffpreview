@@ -442,6 +442,8 @@ try:
             tlabel.bind("<Leave>", lambda event: event.widget.config(bg=scrollframe["background"]))
             tlabels.append(tlabel)
         root.title(root.title() + ' [%d]' % thinfo["count"])
+        tlwidth = tlabel.winfo_reqwidth()
+        tlheight = tlabel.winfo_reqheight()
 except Exception as e:
     eprint(str(e))
     exit(2)
@@ -455,13 +457,12 @@ def fill_grid(cols):
             x = 0; y += 1
 
 def on_resize(event):
-    lw = tlwidth
     cols = cfg.grid_columns
-    cw = cols * lw
-    rw = root.winfo_width() - scrollbar.winfo_width()
+    cw = cols * tlwidth
+    rw = canvas.winfo_width()
     if rw < cw and cols > 1:
         cols -= 1
-    elif rw > cw + lw:
+    elif rw > cw + tlwidth:
         cols += 1
     if cols != cfg.grid_columns:
         cfg.grid_columns = cols
@@ -470,14 +471,10 @@ def on_resize(event):
 ############################################################
 # fix window geometry, start main loop
 
-fill_grid(cfg.grid_columns)
 for il in ilabel:
     il.destroy()
-root.update()
-tlwidth = tlabels[0].winfo_width()
-tlheight = tlabels[0].winfo_height()
 canvas.configure(yscrollincrement=tlheight)
-root.geometry('%dx%d' % (tlwidth * cfg.grid_columns + scrollbar.winfo_width() + 1, 600) )
+root.geometry('%dx%d' % (tlwidth*cfg.grid_columns+scrollbar.winfo_reqwidth()+1, 5.2*tlheight) )
 root.minsize(tlwidth, tlheight)
 root.bind("<Configure>", on_resize)
 root.mainloop()

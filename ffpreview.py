@@ -240,7 +240,7 @@ def chk_idxfile():
 ############################################################
 # extract thumbnails from video and collect timestamps
 
-def make_thumbs(vidfile, ilabel):
+def make_thumbs(vidfile, ilabel, pbar):
     global proc
     pictemplate = '%08d.png'
     cmd = 'ffmpeg -loglevel info -hide_banner -y -i "' + vidfile + '"'
@@ -270,7 +270,8 @@ def make_thumbs(vidfile, ilabel):
                     cnt += 1
                     t = x.group().split(':')[1]
                     thinfo['th'].append([ cnt, pictemplate % cnt, t ])
-                    ilabel.config(text=t.split('.')[0])
+                    ilabel.config(text='%s / %d s' % (t.split('.')[0], thinfo['duration']))
+                    pbar['value'] = float(t) * 100 / thinfo['duration']
                     root.update()
         retval = proc.wait()
         proc = None
@@ -324,6 +325,16 @@ container.pack(fill='both', expand=True)
 canvas = Canvas(container)
 canvas.pack(side='left', fill='both', expand=True)
 
+statbar = Frame(root)
+statbar.pack(side='bottom', fill='x')
+stat = []
+for i in range(3):
+    s = Label(statbar, text='', width=20, height=1, relief='flat', anchor='sw')
+    s.pack(side='left', fill='x')
+    stat.append(s)
+progbar = ttk.Progressbar(statbar, orient=HORIZONTAL, length=100, mode='determinate')
+progbar.pack(expand=True)
+
 scrollbar = ttk.Scrollbar(container, orient='vertical', command=canvas.yview)
 scrollbar.pack(side='right', fill='y')
 
@@ -371,16 +382,6 @@ container.bind_all('<End>', on_scroll)   # End key
 container.bind_all('<Prior>', on_scroll) # PageUp key
 container.bind_all('<Next>', on_scroll)  # PageDn key
 
-ilabel = [
-    Label(scrollframe, text='Generating view ...', width=15, height=2, anchor='w'),
-    Label(scrollframe, text='', width=15, height=2, anchor='w'),
-    Label(scrollframe, text='', width=10, height=2, anchor='e'),
-    Label(scrollframe, text='', width=12, height=2, anchor='w')
-]
-ilabel[0].grid(column=0, row=0)
-ilabel[1].grid(column=0, row=1)
-ilabel[2].grid(column=1, row=1)
-ilabel[3].grid(column=2, row=1)
 root.update()
 
 ############################################################
@@ -400,9 +401,8 @@ if cfg.force or not chk_idxfile():
                 os.unlink(cfg.tmpdir + '/' + f)
             except Exception as e:
                 pass
-    ilabel[1].config(text='Processing'),
-    ilabel[3].config(text='of ' + (str(thinfo['duration']),'(unknown)')[thinfo['duration']<= 0] + ' s')
-    make_thumbs(cfg.vid, ilabel[2])
+    stat[0].config(text='Processing video:'),
+    make_thumbs(cfg.vid, stat[1], progbar)
 
 
 ############################################################
@@ -424,11 +424,11 @@ try:
         idx = json.load(idxfile)
         thumbs=[]
         tlabels=[]
-        ilabel[1].config(text='Loading')
-        ilabel[3].config(text='of ' + str(thinfo['count']))
+        stat[0].config(text='Loading:')
         for th in idx['th']:
             if th[0] % 100 == 0:
-                ilabel[2].config(text=str(th[0]))
+                stat[1].config(text='%d / %d' % (th[0], thinfo['count']))
+                progbar['value'] = th[0] * 100 / thinfo['count']
                 root.update()
             thumb = PhotoImage(file=cfg.tmpdir + '/' + th[1])
             thumbs.append(thumb)
@@ -466,11 +466,13 @@ def on_resize(event):
 
 ############################################################
 # fix window geometry, start main loop
-
-for il in ilabel:
-    il.destroy()
+progbar.forget()
+stat[0].config(text=' Duration: ' + str(thinfo["duration"]) + ' s')
+stat[1].config(text=' Thumbs: ' + str(thinfo["count"]))
+stat[2].config(text=' Method: ' + str(thinfo["method"]))
 canvas.configure(yscrollincrement=tlheight)
-root.geometry('%dx%d' % (tlwidth*cfg.grid_columns+scrollbar.winfo_reqwidth()+1, 5.2*tlheight) )
+root.geometry('%dx%d' % (tlwidth*cfg.grid_columns+scrollbar.winfo_reqwidth()+1,
+                         5.2*tlheight+statbar.winfo_reqheight()) )
 root.minsize(tlwidth, tlheight)
 root.bind("<Configure>", on_resize)
 root.mainloop()

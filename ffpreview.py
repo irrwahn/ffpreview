@@ -260,6 +260,8 @@ def chk_idxfile():
                     return False
                 if chk['scene_thresh'] != thinfo['scene_thresh']:
                     return False
+                if chk['customvf'] != thinfo['customvf']:
+                    return False
             # do something with date?
             thinfo = chk
             return True

@@ -465,7 +465,7 @@ def lclick_action(event):
 def rclick_menu(event):
     def on_pop_focus_out(event):
         popup.destroy()
-    def on_popup_enter(event):
+    def on_popup_visible(event):
         popup.grab_set_global()
     def copy2clp(txt):
         root.clipboard_clear()
@@ -474,7 +474,7 @@ def rclick_menu(event):
     bfont.configure(weight=tk.font.BOLD)
     popup = tk.Menu(root, tearoff=0)
     popup.bind("<FocusOut>", on_pop_focus_out)
-    popup.bind("<Enter>", on_popup_enter)
+    popup.bind("<Visibility>", on_popup_visible)
     popup.add_command(label='Open in mpv at timestamp',
                       command=lambda:mpv_open(cfg.vid, event.widget.th[2], True), font=bfont)
     popup.add_command(label='Open in mpv', command=lambda:mpv_open(cfg.vid))

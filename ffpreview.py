@@ -41,7 +41,6 @@ TODO:
 
 * support more ffmpeg select filters?
 * make player configurable?
-* option to specify start and end time?
 
 """
 
@@ -87,6 +86,15 @@ signal.signal(signal.SIGQUIT, sigint_handler)
 signal.signal(signal.SIGTERM, sigint_handler)
 signal.signal(signal.SIGPIPE, signal.SIG_IGN)
 
+def hms2s(ts):
+    h = 0
+    m = 0
+    s = 0.0
+    t = ts.split(':')
+    for i in range(len(t)):
+        h = m; m = s; s = float(t[i])
+    return float(h * 3600) + m * 60 + s
+
 
 ############################################################
 # configuration
@@ -105,8 +113,8 @@ cfg.method = 'iframe'
 cfg.frame_skip = None
 cfg.time_skip = None
 cfg.scene_thresh = None
-#cfg.startts = '0'
-
+cfg.start = None
+cfg.end = None
 
 # parse command line arguments
 parser = argparse.ArgumentParser(
@@ -122,9 +130,15 @@ parser.add_argument('-i', '--iframe', action='count', help='select only I-frames
 parser.add_argument('-n', '--nskip', type=int, metavar='N', help='select only every Nth frame')
 parser.add_argument('-N', '--nsecs', type=int, metavar='F', help='select one frame every F seconds')
 parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold (slow!); 0 < F < 1')
+parser.add_argument('-S', '--start', metavar='TS', help='start video analysis at time TS')
+parser.add_argument('-E', '--end', metavar='TS', help='end video analysis at time TS')
 args = parser.parse_args()
 cfg.vid = args.filename
 cfg.tmpdir = args.tmpdir
+if args.start:
+    cfg.start = hms2s(args.start)
+if args.end:
+    cfg.end = hms2s(args.end)
 if args.grid_cols:
     cfg.grid_columns = args.grid_cols
 if args.width:
@@ -166,6 +180,8 @@ thinfo = {
     'name': os.path.basename(cfg.vid),
     'duration': -1,
     'fps': -1,
+    'start': cfg.start,
+    'end': cfg.end,
     'count': 0,
     'width': cfg.thumb_width,
     'method': cfg.method,
@@ -216,6 +232,10 @@ def chk_idxfile():
                 return False
             if chk['duration'] != thinfo['duration']:
                 return False
+            if chk['start'] != thinfo['start']:
+                return False
+            if chk['end'] != thinfo['end']:
+                return False
             if chk['width'] != thinfo['width']:
                 return False
             if chk['method'] != thinfo['method']:
@@ -240,7 +260,12 @@ def chk_idxfile():
 def make_thumbs(vidfile, ilabel, pbar):
     global proc
     pictemplate = '%08d.png'
-    cmd = 'ffmpeg -loglevel info -hide_banner -y -i "' + vidfile + '"'
+    cmd = 'ffmpeg -loglevel info -hide_banner -y'
+    if cfg.start:
+        cmd += ' -ss ' + str(cfg.start)
+    if cfg.end:
+        cmd += ' -to ' + str(cfg.end)
+    cmd += ' -i "' + vidfile + '"'
     if cfg.method == 'scene':
         cmd += ' -vf "select=gt(scene\,' + str(cfg.scene_thresh) + ')'
     elif cfg.method == 'skip':
@@ -266,6 +291,8 @@ def make_thumbs(vidfile, ilabel, pbar):
                 if x is not None:
                     cnt += 1
                     t = x.group().split(':')[1]
+                    if cfg.start:
+                        t = str(float(t) + cfg.start)
                     thinfo['th'].append([ cnt, pictemplate % cnt, t ])
                     ilabel.config(text='%s / %d s' % (t.split('.')[0], thinfo['duration']))
                     pbar['value'] = float(t) * 100 / thinfo['duration']
@@ -319,10 +346,27 @@ mRf6NVRgi7AOlxRYab+ND1Sk8dOEWzaqSOmTwZ4vSGnVP4xgNOsvzQYH8GEoeHeN/TY+sCyG12NVsOVJ
 8lmRcYUNxWiJXYcrMp5OAq9KuI8kcXvjwKkkbZ19ra3ZDuwv+H5/yOloTWu2q2gwqtZsS3FhPYWva1qz/WVrVjanB+egOR3txsZ8Ye8sO3ACz/4N3Wzp2esU
 Ut0AAAAASUVORK5CYII=
 '''
+broken_img_png = '''
+iVBORw0KGgoAAAANSUhEUgAAAIAAAABJCAYAAAD12S63AAAEi0lEQVR42u1dTUhVQRT+1LIfSehHyoKCwhSsFombKIiwIEm0IiiICApzIRYlRbaxXGTtWrSQ
+apG0chMkZGFSC6NFQiFJEbTyr4gkRDT02WvhEx9yu2/mzs89c+/5YBY+Z+aen2/OPWfuffMABoPBYDAYDEbskMUm0I4VABrS/r7DJokWcgGcANABICnRWtl0
+7mA/gOeSDhZtfAsgjGTc7J4dQSfWAugmvvqSvNaCowpAu6HwqxLa2wCUScy5i125gNWpJOmbofuuKgE6AFQE1K3CZ94LcXJwLYBeww5WJcARQ/p/8ZEpL0ql
+UV/IDqacgTtTGXihgbhj+wFcAVBg2S5bU7euSQ+Z6qNAgoOEnPwOQGVIdrgWMD/JWTRPoU/fn1TrYlttWjHZ0oEBC7edxz59b1ByfpdGIzwFUBOSHvNhOizC
+T3hcp9mn/xIqBLgqoeQsgCcAikOsMjKF6TAjXoOr+UAmxfaEsMvXB3MVgMlb3OJ8YIkLJAijtCrz2co1XQLaLkPrfPqOUyDAKs0EMOVcHQQotCDDpMd1D/j0
+P+9CFPhNoILQQYBKS3JckrTVyrAJcFLBuKrGagFQAqAcwF3DBGjKMH4s1S8vVdGMaMwHyCeFQQ38OoBxtgjKNKuZAD0Bx2cD+KuJkGRJsM9SFNgoKdcxjQQY
+8xl7TVCeGQl5pjzGb/DpPxqHKBAEjQLzDinqJ4spQX0vS8rRGCYBEoajQKtBcl5XmGPU8MK5LTnmJeUo0Kp4GzAlV4nCHLrQH4V8IGk4CqwxJFfQOYYN2PCt
+YD6Q4yoJvinmAl8k5flgkACmMZF2rRmP/7dRJIHpKCCj3AzMbQOfs2jTX6lren2LaNokCYK8Fi4Spnv+8/mbAEQ7nvbZTgC3YOfR6SOLBFiLue8KjHn8LzfD
+2GVRjgJhPQj6Cnrw06/ItjCDAkbf7DABKOIUtXzAlSjQLaBLflr/AdDFICUSiGTf9Rp2B1VbtYAuNcRXfzre++ia4Cgg9uRtMW5KkIV6PtBlUxCRJ3KHQ44C
+InjmyOqfx/YMOpdzFJAjwJBjBAAyn1/ABJCsAFzEfQokeIFgz75tkUAEvXAXfrr/jVMU+ATgDAi+TmUYKzLYxQq5H4ZMgrgjK4N9tlGJAtkGKoJi9j8A4GjY
+i+R7CFFgKftdyoaRygUYC2imYjcRAR5oIEGcsRFq30kwihbDUeAPr27ldohCFPgRYPwrdrSWlmtakTrFKOBVEdRxGHfroCwRQT4Kji/i1a2lWT16p0pTLsCO
+DvYCTAEFY4gIu4PDuHJrdnVTwrVVTmF1JwBcdMVg1YJKrePV/d82AKA0yluTFKIABUdPAzgbxdq2TNAApx0gqe6zA0sRE1CPAjYc3gtgPWKKTRYIcE9hPp2O
+HsfcSymMAEYWfad9L8TO9LVBgE6iSWykbgOdhrc8ZR3OcCTZUpFrBHPnDzMcJcCwpFztAJbH0Sk2jybPh73zb2VCNf92YgSjwG42dTxJMAICZ+sy/PFZo8Pb
+Ec1fP40FEpDbSStlk0UTXj/D3sRmYTAYDAbDKP4Bb2zlnKfZbGYAAAAASUVORK5CYII=
+'''
 
 root = tk.Tk(className='ffpreview')
 root.title('ffpreview - '+ cfg.vid)
 ffpreview_ico = tk.PhotoImage(data=ffpreview_png)
+broken_img = tk.PhotoImage(data=broken_img_png)
 root.iconphoto(False, ffpreview_ico)
 root.bind('<Escape>', die)
 root.bind('<Control-w>', die)
@@ -460,10 +504,22 @@ try:
                 statdsp[1].config(text='%d / %d' % (th[0], thinfo['count']))
                 progbar['value'] = th[0] * 100 / thinfo['count']
                 root.update()
-            thumb = tk.PhotoImage(file=cfg.tmpdir + '/' + th[1])
+            try:
+                thumb = tk.PhotoImage(file=cfg.tmpdir + '/' + th[1])
+            except:
+                thumb = broken_img
             tlabel = tk.Label(scrollframe, text=s2hms(th[2]), image=thumb, compound='top', relief='solid')
             tlabel.th = th
             tlabel.img = thumb
+            tlabel.bind('<Button-1>', lclick_action)
+            tlabel.bind('<Button-3>', rclick_menu)
+            tlabel.bind("<Enter>", enter_thumb)
+            tlabel.bind("<Leave>", leave_thumb)
+            tlabels.append(tlabel)
+        if len(tlabels) == 0: # no thumbnails available :(
+            tlabel = tk.Label(scrollframe, text=s2hms(str(cfg.start)), image=broken_img, compound='top', relief='solid')
+            tlabel.th = [0, 'broken', str(cfg.start)]
+            tlabel.img = broken_img
             tlabel.bind('<Button-1>', lclick_action)
             tlabel.bind('<Button-3>', rclick_menu)
             tlabel.bind("<Enter>", enter_thumb)

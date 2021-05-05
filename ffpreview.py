@@ -200,6 +200,7 @@ thinfo = {
     'frame_skip': cfg.frame_skip,
     'time_skip': cfg.time_skip,
     'scene_thresh': cfg.scene_thresh,
+    'customvf': cfg.customvf,
     'date':0,
     'th':[]
 }

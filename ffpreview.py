@@ -41,23 +41,22 @@ TODO:
 
 * support more ffmpeg select filters?
 * make player configurable?
+* option to specify start and end time?
 
 """
 
 
 import io
-import glob
 import os
 import sys
-import getopt
 import signal
 import time
-import random
+import re
 import tempfile
 import argparse
 import json
 from subprocess import PIPE, Popen
-from tkinter import *
+import tkinter as tk
 from tkinter import ttk
 from inspect import currentframe
 
@@ -283,7 +282,6 @@ def make_thumbs(vidfile, ilabel, pbar):
         with open(cfg.idxfile, 'w') as idxfile:
             json.dump(thinfo, idxfile, indent=2)
     except Exception as e:
-        eprint(str(e))
         exit(1)
 
 
@@ -311,41 +309,32 @@ mRf6NVRgi7AOlxRYab+ND1Sk8dOEWzaqSOmTwZ4vSGnVP4xgNOsvzQYH8GEoeHeN/TY+sCyG12NVsOVJ
 Ut0AAAAASUVORK5CYII=
 '''
 
-root = Tk(className='ffpreview')
+root = tk.Tk(className='ffpreview')
 root.title('ffpreview - '+ cfg.vid)
-ffpreview_ico = PhotoImage(data=ffpreview_png)
+ffpreview_ico = tk.PhotoImage(data=ffpreview_png)
 root.iconphoto(False, ffpreview_ico)
 root.bind('<Escape>', die_ev)
 root.bind('<Control-w>', die_ev)
 root.bind('<Control-q>', die_ev)
 
-container = Frame(root)
-container.pack(fill='both', expand=True)
-
-canvas = Canvas(container)
-canvas.pack(side='left', fill='both', expand=True)
-
-statbar = Frame(root)
+statbar = tk.Frame(root)
 statbar.pack(side='bottom', fill='x')
 stat = []
 for i in range(3):
-    s = Label(statbar, text='', width=20, height=1, relief='flat', anchor='sw')
+    s = tk.Label(statbar, text='', width=20, height=1, relief='flat', anchor='sw')
     s.pack(side='left', fill='x')
     stat.append(s)
-progbar = ttk.Progressbar(statbar, orient=HORIZONTAL, length=100, mode='determinate')
+progbar = ttk.Progressbar(statbar, orient=tk.HORIZONTAL, length=100, mode='determinate')
 progbar.pack(expand=True)
 
+container = tk.Frame(root)
+container.pack(fill='both', expand=True)
+canvas = tk.Canvas(container)
+canvas.pack(side='left', fill='both', expand=True)
 scrollbar = ttk.Scrollbar(container, orient='vertical', command=canvas.yview)
 scrollbar.pack(side='right', fill='y')
-
-scrollframe = Frame(canvas)
-scrollframe.bind(
-    '<Configure>',
-    lambda e: canvas.configure(
-        scrollregion=canvas.bbox('all')
-    )
-)
-
+scrollframe = tk.Frame(canvas)
+scrollframe.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
 canvas.create_window((0, 0), window=scrollframe, anchor='nw')
 canvas.configure(yscrollcommand=scrollbar.set)
 
@@ -430,19 +419,22 @@ try:
                 stat[1].config(text='%d / %d' % (th[0], thinfo['count']))
                 progbar['value'] = th[0] * 100 / thinfo['count']
                 root.update()
-            thumb = PhotoImage(file=cfg.tmpdir + '/' + th[1])
+            thumb = tk.PhotoImage(file=cfg.tmpdir + '/' + th[1])
             thumbs.append(thumb)
-            tlabel = Label(scrollframe, text=s2hms(th[2]), image=thumb, compound='top', relief='solid')
+            tlabel = tk.Label(scrollframe, text=s2hms(th[2]), image=thumb, compound='top', relief='solid')
             tlabel.bind('<Button-1>', click_thumb)
             tlabel.bind("<Enter>", lambda event: event.widget.config(bg=cfg.hightlightcolor))
             tlabel.bind("<Leave>", lambda event: event.widget.config(bg=scrollframe["background"]))
             tlabels.append(tlabel)
-        root.title(root.title() + ' [%d]' % thinfo["count"])
         tlwidth = tlabel.winfo_reqwidth()
         tlheight = tlabel.winfo_reqheight()
 except Exception as e:
     eprint(str(e))
     exit(2)
+
+
+############################################################
+# fix window geometry, start main loop
 
 def fill_grid(cols):
     x = 0; y = 0
@@ -464,17 +456,15 @@ def on_resize(event):
         cfg.grid_columns = cols
         fill_grid(cols)
 
-############################################################
-# fix window geometry, start main loop
 progbar.forget()
 stat[0].config(text=' Duration: ' + str(thinfo["duration"]) + ' s')
 stat[1].config(text=' Thumbs: ' + str(thinfo["count"]))
 stat[2].config(text=' Method: ' + str(thinfo["method"]))
 canvas.configure(yscrollincrement=tlheight)
+root.bind("<Configure>", on_resize)
+root.minsize(tlwidth, tlheight)
 root.geometry('%dx%d' % (tlwidth*cfg.grid_columns+scrollbar.winfo_reqwidth()+1,
                          5.2*tlheight+statbar.winfo_reqheight()) )
-root.minsize(tlwidth, tlheight)
-root.bind("<Configure>", on_resize)
 root.mainloop()
 
 # EOF

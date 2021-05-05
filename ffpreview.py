@@ -58,6 +58,7 @@ import json
 from subprocess import PIPE, Popen
 import tkinter as tk
 from tkinter import ttk
+from tkinter import font
 from inspect import currentframe
 
 
@@ -65,7 +66,7 @@ def eprint(*args, **kwargs):
     print('LINE %d: ' % currentframe().f_back.f_lineno, file=sys.stderr, end = '')
     print(*args, file=sys.stderr, **kwargs)
 
-def die():
+def die(event=None):
     global proc
     if proc is not None:
         eprint('killing subprocess: %s' % proc.args)
@@ -75,9 +76,6 @@ def die():
         except subprocess.TimeoutExpired:
             proc.kill()
     exit()
-
-def die_ev(event):
-    die()
 
 def sigint_handler(signum, frame):
     eprint('ffpreview caught signal %d, exiting.' % signum)
@@ -286,6 +284,19 @@ def make_thumbs(vidfile, ilabel, pbar):
 
 
 ############################################################
+# open video in mpv
+
+def mpv_open(filename, start=None, paused=False):
+    cmd = 'mpv --no-ordered-chapters'
+    if start:
+        cmd += ' --start=' + start
+    if paused:
+        cmd += ' --pause'
+    cmd += ' "' + filename + '"'
+    Popen('exec ' + cmd, shell=True)
+
+
+############################################################
 # initialize window
 
 ffpreview_png = '''
@@ -313,17 +324,17 @@ root = tk.Tk(className='ffpreview')
 root.title('ffpreview - '+ cfg.vid)
 ffpreview_ico = tk.PhotoImage(data=ffpreview_png)
 root.iconphoto(False, ffpreview_ico)
-root.bind('<Escape>', die_ev)
-root.bind('<Control-w>', die_ev)
-root.bind('<Control-q>', die_ev)
+root.bind('<Escape>', die)
+root.bind('<Control-w>', die)
+root.bind('<Control-q>', die)
 
 statbar = tk.Frame(root)
 statbar.pack(side='bottom', fill='x')
-stat = []
-for i in range(3):
+statdsp = []
+for i in range(4):
     s = tk.Label(statbar, text='', width=20, height=1, relief='flat', anchor='sw')
     s.pack(side='left', fill='x')
-    stat.append(s)
+    statdsp.append(s)
 progbar = ttk.Progressbar(statbar, orient=tk.HORIZONTAL, length=100, mode='determinate')
 progbar.pack(expand=True)
 
@@ -390,8 +401,8 @@ if cfg.force or not chk_idxfile():
                 os.unlink(cfg.tmpdir + '/' + f)
             except Exception as e:
                 pass
-    stat[0].config(text='Processing video:'),
-    make_thumbs(cfg.vid, stat[1], progbar)
+    statdsp[0].config(text='Processing video:'),
+    make_thumbs(cfg.vid, statdsp[1], progbar)
 
 
 ############################################################
@@ -404,27 +415,59 @@ def s2hms(ts):
     res = '%d:%02d:%02d%s' % (h, m, s, ('%.3f' % ms).lstrip('0'))
     return res
 
-def click_thumb(event):
-    cmd = 'mpv --no-ordered-chapters --start=' + event.widget.cget('text') + ' --pause "' + cfg.vid + '"'
-    Popen('exec ' + cmd, shell=True)
+def lclick_action(event):
+    mpv_open(cfg.vid, event.widget.th[2], True)
+
+def rclick_menu(event):
+    def copy2clp(txt):
+        root.clipboard_clear()
+        root.clipboard_append(txt)
+    bfont = tk.font.Font(font='TkMenuFont')
+    bfont.configure(weight=tk.font.BOLD)
+    popup = tk.Menu(root, tearoff=0)
+    popup.add_command(label='Open in mpv at timestamp',
+                      command=lambda:mpv_open(cfg.vid, event.widget.th[2], True), font=bfont)
+    popup.add_command(label='Open in mpv', command=lambda:mpv_open(cfg.vid))
+    popup.add_separator()
+    popup.add_command(label='Copy timestamp [H:M:S.ms]', command=lambda:copy2clp(event.widget.cget('text')))
+    popup.add_command(label='Copy timestamp [S.ms]', command=lambda:copy2clp(event.widget.th[2]))
+    popup.add_separator()
+    popup.add_command(label='Copy original filename', command=lambda:copy2clp(cfg.vid))
+    popup.add_command(label='Copy thumb filename', command=lambda:copy2clp(event.widget.img.cget('file')))
+    popup.add_separator()
+    popup.add_command(label='Quit', command=lambda:die())
+    try:
+        popup.tk_popup(event.x_root, event.y_root)
+    finally:
+        popup.grab_release()
+
+def enter_thumb(event):
+    event.widget.config(bg=cfg.hightlightcolor)
+    inf = event.widget.th
+    statdsp[3].config(text=inf[1])
+
+def leave_thumb(event):
+    event.widget.config(bg=scrollframe['background'])
+    statdsp[3].config(text='')
 
 try:
     with open(cfg.idxfile, 'r') as idxfile:
         idx = json.load(idxfile)
-        thumbs=[]
         tlabels=[]
-        stat[0].config(text='Loading:')
+        statdsp[0].config(text='Loading:')
         for th in idx['th']:
             if th[0] % 100 == 0:
-                stat[1].config(text='%d / %d' % (th[0], thinfo['count']))
+                statdsp[1].config(text='%d / %d' % (th[0], thinfo['count']))
                 progbar['value'] = th[0] * 100 / thinfo['count']
                 root.update()
             thumb = tk.PhotoImage(file=cfg.tmpdir + '/' + th[1])
-            thumbs.append(thumb)
             tlabel = tk.Label(scrollframe, text=s2hms(th[2]), image=thumb, compound='top', relief='solid')
-            tlabel.bind('<Button-1>', click_thumb)
-            tlabel.bind("<Enter>", lambda event: event.widget.config(bg=cfg.hightlightcolor))
-            tlabel.bind("<Leave>", lambda event: event.widget.config(bg=scrollframe["background"]))
+            tlabel.th = th
+            tlabel.img = thumb
+            tlabel.bind('<Button-1>', lclick_action)
+            tlabel.bind('<Button-3>', rclick_menu)
+            tlabel.bind("<Enter>", enter_thumb)
+            tlabel.bind("<Leave>", leave_thumb)
             tlabels.append(tlabel)
         tlwidth = tlabel.winfo_reqwidth()
         tlheight = tlabel.winfo_reqheight()
@@ -457,14 +500,15 @@ def on_resize(event):
         fill_grid(cols)
 
 progbar.forget()
-stat[0].config(text=' Duration: ' + str(thinfo["duration"]) + ' s')
-stat[1].config(text=' Thumbs: ' + str(thinfo["count"]))
-stat[2].config(text=' Method: ' + str(thinfo["method"]))
+statdsp[0].config(text=' Duration: ' + str(thinfo["duration"]) + ' s')
+statdsp[1].config(text=' Thumbs: ' + str(thinfo["count"]))
+statdsp[2].config(text=' Method: ' + str(thinfo["method"]))
 canvas.configure(yscrollincrement=tlheight)
 root.bind("<Configure>", on_resize)
 root.minsize(tlwidth, tlheight)
 root.geometry('%dx%d' % (tlwidth*cfg.grid_columns+scrollbar.winfo_reqwidth()+1,
                          5.2*tlheight+statbar.winfo_reqheight()) )
+fill_grid(cfg.grid_columns)
 root.mainloop()
 
 # EOF

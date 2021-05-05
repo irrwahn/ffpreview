@@ -39,7 +39,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 TODO:
 
-* support more ffmpeg select filters?
+* option to specify custom filter to pass to ffmpeg
 * make player configurable?
 
 """
@@ -463,12 +463,18 @@ def lclick_action(event):
     mpv_open(cfg.vid, event.widget.th[2], True)
 
 def rclick_menu(event):
+    def on_pop_focus_out(event):
+        popup.destroy()
+    def on_popup_enter(event):
+        popup.grab_set_global()
     def copy2clp(txt):
         root.clipboard_clear()
         root.clipboard_append(txt)
     bfont = tk.font.Font(font='TkMenuFont')
     bfont.configure(weight=tk.font.BOLD)
     popup = tk.Menu(root, tearoff=0)
+    popup.bind("<FocusOut>", on_pop_focus_out)
+    popup.bind("<Enter>", on_popup_enter)
     popup.add_command(label='Open in mpv at timestamp',
                       command=lambda:mpv_open(cfg.vid, event.widget.th[2], True), font=bfont)
     popup.add_command(label='Open in mpv', command=lambda:mpv_open(cfg.vid))

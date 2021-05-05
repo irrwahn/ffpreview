@@ -113,13 +113,15 @@ cfg.method = 'iframe'
 cfg.frame_skip = None
 cfg.time_skip = None
 cfg.scene_thresh = None
+cfg.customvf = None
+cfg.reuse = False
 cfg.start = None
 cfg.end = None
 
 # parse command line arguments
 parser = argparse.ArgumentParser(
     description='Generate clickable video thumbnail preview.',
-    epilog='The -i, -N, -n and -s options are mutually exclusive, -i beats -N beats -n beats -s.'
+    epilog='The -C, -i, -N, -n and -s options are mutually exclusive, -C beats -i beats -N beats -n beats -s.'
 )
 parser.add_argument('filename', help='input video file')
 parser.add_argument('-c', '--grid_cols', type=int, metavar='N', help='number of columns in thumbnail preview ')
@@ -130,6 +132,8 @@ parser.add_argument('-i', '--iframe', action='count', help='select only I-frames
 parser.add_argument('-n', '--nskip', type=int, metavar='N', help='select only every Nth frame')
 parser.add_argument('-N', '--nsecs', type=int, metavar='F', help='select one frame every F seconds')
 parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold (slow!); 0 < F < 1')
+parser.add_argument('-C', '--customvf', metavar='S', help='select by custom filter string S')
+parser.add_argument('-R', '--reuse', action='count', help='reuse filter settings from index file')
 parser.add_argument('-S', '--start', metavar='TS', help='start video analysis at time TS')
 parser.add_argument('-E', '--end', metavar='TS', help='end video analysis at time TS')
 args = parser.parse_args()
@@ -145,6 +149,8 @@ if args.width:
     cfg.thumb_width = args.width
 if args.force:
     cfg.force = True
+if args.reuse:
+    cfg.reuse = True
 if args.scene:
     cfg.scene_thresh = args.scene
     cfg.method = 'scene'
@@ -162,6 +168,12 @@ if args.iframe:
     cfg.frame_skip = None
     cfg.scene_thresh = None
     cfg.method = 'iframe'
+if args.customvf:
+    cfg.time_skip = None
+    cfg.frame_skip = None
+    cfg.scene_thresh = None
+    cfg.customvf = args.customvf
+    cfg.method = 'customvf'
 
 # prepare thumbnail directory
 if cfg.tmpdir is None:
@@ -236,16 +248,17 @@ def chk_idxfile():
                 return False
             if chk['end'] != thinfo['end']:
                 return False
-            if chk['width'] != thinfo['width']:
-                return False
-            if chk['method'] != thinfo['method']:
-                return False
-            if chk['frame_skip'] != thinfo['frame_skip']:
-                return False
-            if chk['scene_thresh'] != thinfo['scene_thresh']:
-                return False
             if chk['count'] != len(chk['th']):
                 return False
+            if not cfg.reuse:
+                if chk['width'] != thinfo['width']:
+                    return False
+                if chk['method'] != thinfo['method']:
+                    return False
+                if chk['frame_skip'] != thinfo['frame_skip']:
+                    return False
+                if chk['scene_thresh'] != thinfo['scene_thresh']:
+                    return False
             # do something with date?
             thinfo = chk
             return True
@@ -273,6 +286,8 @@ def make_thumbs(vidfile, ilabel, pbar):
     elif cfg.method == 'time':
         fs = int(float(cfg.time_skip) * float(thinfo['fps']))
         cmd += ' -vf "select=not(mod(n\,' + str(fs) + '))'
+    elif cfg.method == 'customvf':
+        cmd += ' -vf "' + cfg.customvf
     else: # iframe
         cmd += ' -vf "select=eq(pict_type\,I)'
     cmd += ',showinfo,scale=' + str(cfg.thumb_width) + ':-1"'

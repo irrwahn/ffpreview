@@ -36,24 +36,23 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
-"""
-TODO:
 
-* option to specify custom filter to pass to ffmpeg
-* make player configurable?
+import sys
 
-"""
-
+if sys.version_info.major < 3 or sys.version_info.minor < 5:
+    print('Need Python version 3.5+ or later, got version ' + str(sys.version), file=sys.stderr)
+    exit(0)
 
 import io
 import os
-import sys
+from os.path import expanduser
 import signal
 import time
 import re
 import tempfile
 import argparse
 import json
+from configparser import RawConfigParser as ConfigParser
 from subprocess import PIPE, Popen
 import tkinter as tk
 from tkinter import ttk
@@ -61,9 +60,37 @@ from tkinter import font
 from inspect import currentframe
 
 
+############################################################
+# utility functions
+
 def eprint(*args, **kwargs):
     print('LINE %d: ' % currentframe().f_back.f_lineno, file=sys.stderr, end = '')
     print(*args, file=sys.stderr, **kwargs)
+
+def hms2s(ts):
+    h = 0
+    m = 0
+    s = 0.0
+    t = ts.split(':')
+    for i in range(len(t)):
+        h = m; m = s; s = float(t[i])
+    return float(h * 3600) + m * 60 + s
+
+def s2hms(ts):
+    s, ms = divmod(float(ts), 1.0)
+    m, s = divmod(s, 60)
+    h, m = divmod(m, 60)
+    res = '%d:%02d:%02d%s' % (h, m, s, ('%.3f' % ms).lstrip('0'))
+    return res
+
+def str2bool(s):
+    return s.lower() in ['true', '1', 'on', 'y', 'yes']
+
+
+############################################################
+# low-level initialization
+
+proc = None
 
 def die(event=None):
     global proc
@@ -86,37 +113,37 @@ signal.signal(signal.SIGQUIT, sigint_handler)
 signal.signal(signal.SIGTERM, sigint_handler)
 signal.signal(signal.SIGPIPE, signal.SIG_IGN)
 
-def hms2s(ts):
-    h = 0
-    m = 0
-    s = 0.0
-    t = ts.split(':')
-    for i in range(len(t)):
-        h = m; m = s; s = float(t[i])
-    return float(h * 3600) + m * 60 + s
-
 
 ############################################################
 # configuration
 
-class Config:
-    pass
-cfg = Config()
-cfg.vid = ''
-cfg.tmpdir = None
-cfg.idxfile = ''
-cfg.grid_columns = 5
-cfg.thumb_width = 128
-cfg.hightlightcolor="lightsteelblue1"
-cfg.force = False
-cfg.method = 'iframe'
-cfg.frame_skip = None
-cfg.time_skip = None
-cfg.scene_thresh = None
-cfg.customvf = None
-cfg.reuse = False
-cfg.start = None
-cfg.end = None
+cfg = {}
+
+# set defaults
+cfg['home'] = expanduser("~")
+cfg['conffile'] = 'ffpreview.conf'
+cfg['vid'] = ''
+cfg['tmpdir'] = ''
+cfg['thdir'] = ''
+cfg['idxfile'] = ''
+cfg['grid'] = '5x5'
+cfg['grid_columns'] = 5
+cfg['grid_rows'] = 5
+cfg['thumb_width'] = 128
+cfg['highlightcolor'] = 'lightsteelblue1'
+cfg['ffprobe'] = 'ffprobe'
+cfg['ffmpeg'] = 'ffmpeg'
+cfg['player'] = 'mpv --no-ordered-chapters --start=%t %f'
+cfg['plpaused'] = 'mpv --no-ordered-chapters --start=%t --pause %f'
+cfg['force'] = False
+cfg['reuse'] = False
+cfg['method'] = 'iframe'
+cfg['frame_skip'] = None
+cfg['time_skip'] = None
+cfg['scene_thresh'] = None
+cfg['customvf'] = None
+cfg['start'] = None
+cfg['end'] = None
 
 # parse command line arguments
 parser = argparse.ArgumentParser(
@@ -124,221 +151,123 @@ parser = argparse.ArgumentParser(
     epilog='The -C, -i, -N, -n and -s options are mutually exclusive, -C beats -i beats -N beats -n beats -s.'
 )
 parser.add_argument('filename', help='input video file')
-parser.add_argument('-c', '--grid_cols', type=int, metavar='N', help='number of columns in thumbnail preview ')
+parser.add_argument('-c', '--config', metavar='FILE', help='read configuration from FILE')
+parser.add_argument('-g', '--grid', metavar='C[xR]', help='number of columns and rows in preview')
 parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
-parser.add_argument('-t', '--tmpdir', metavar='path', help='path to thumbnail parent directory')
-parser.add_argument('-f', '--force', action='count', help='force rebuilding thumbnails and index')
-parser.add_argument('-i', '--iframe', action='count', help='select only I-frames (the default)')
+parser.add_argument('-t', '--tmpdir', metavar='path', help='path to thumbnail top level directory')
+parser.add_argument('-f', '--force', action='count', help='force thumbnail and index rebuild')
+parser.add_argument('-r', '--reuse', action='count', help='reuse filter settings from index file')
+parser.add_argument('-i', '--iframe', action='count', help='select only I-frames (default)')
 parser.add_argument('-n', '--nskip', type=int, metavar='N', help='select only every Nth frame')
 parser.add_argument('-N', '--nsecs', type=int, metavar='F', help='select one frame every F seconds')
-parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold (slow!); 0 < F < 1')
+parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold; 0 < F < 1')
 parser.add_argument('-C', '--customvf', metavar='S', help='select by custom filter string S')
-parser.add_argument('-R', '--reuse', action='count', help='reuse filter settings from index file')
 parser.add_argument('-S', '--start', metavar='TS', help='start video analysis at time TS')
 parser.add_argument('-E', '--end', metavar='TS', help='end video analysis at time TS')
 args = parser.parse_args()
-cfg.vid = args.filename
-cfg.tmpdir = args.tmpdir
-if args.start:
-    cfg.start = hms2s(args.start)
-if args.end:
-    cfg.end = hms2s(args.end)
-if args.grid_cols:
-    cfg.grid_columns = args.grid_cols
-if args.width:
-    cfg.thumb_width = args.width
-if args.force:
-    cfg.force = True
-if args.reuse:
-    cfg.reuse = True
-if args.scene:
-    cfg.scene_thresh = args.scene
-    cfg.method = 'scene'
-if args.nskip:
-    cfg.frame_skip = args.nskip
-    cfg.scene_thresh = None
-    cfg.method = 'skip'
-if args.nsecs:
-    cfg.time_skip = args.nsecs
-    cfg.frame_skip = None
-    cfg.scene_thresh = None
-    cfg.method = 'time'
-if args.iframe:
-    cfg.time_skip = None
-    cfg.frame_skip = None
-    cfg.scene_thresh = None
-    cfg.method = 'iframe'
-if args.customvf:
-    cfg.time_skip = None
-    cfg.frame_skip = None
-    cfg.scene_thresh = None
-    cfg.customvf = args.customvf
-    cfg.method = 'customvf'
 
-# prepare thumbnail directory
-if cfg.tmpdir is None:
-    cfg.tmpdir = tempfile.gettempdir()
-cfg.tmpdir += '/ffpreview_thumbs/' + os.path.basename(cfg.vid)
+# parse config file
+defconfpath = os.path.join( # try to determine user config file
+    os.environ.get('APPDATA') or
+    os.environ.get('XDG_CONFIG_HOME') or
+    os.path.join(os.environ['HOME'], '.config'),
+    cfg['conffile']
+)
+if args.config:
+    cfg['conffile'] = args.config
+cfgfiles = [defconfpath, cfg['conffile']]
+fconf = ConfigParser(allow_no_value=True, defaults=cfg)
+cf = fconf.read(cfgfiles)
+options = fconf.options('Default')
+for option in options:
+    try:
+        cfg[option] = fconf.get('Default', option)
+        if cfg[option] == '':
+            cfg[option] = None
+    except Exception as e:
+        eprint(str(e))
+
+# fix non-string typed options
+cfg['force'] = str2bool(cfg['force'])
+cfg['reuse'] = str2bool(cfg['reuse'])
+cfg['thumb_width'] = int(cfg['thumb_width'])
+cfg['force'] = bool(cfg['force'])
+cfg['reuse'] = bool(cfg['reuse'])
+cfg['frame_skip'] = int(cfg['frame_skip'])
+cfg['time_skip'] = float(cfg['time_skip'])
+cfg['scene_thresh'] = float(cfg['scene_thresh'])
+
+# evaluate remaining command line args
+cfg['vid'] = args.filename
+if args.tmpdir:
+    cfg['tmpdir'] = args.tmpdir
+if args.start:
+    cfg['start'] = hms2s(args.start)
+if args.end:
+    cfg['end'] = hms2s(args.end)
+if args.grid:
+    cfg['grid'] = args.grid
+if args.width:
+    cfg['thumb_width'] = args.width
+if args.force:
+    cfg['force'] = True
+if args.reuse:
+    cfg['reuse'] = True
+if args.scene:
+    cfg['method'] = 'scene'
+    cfg['scene_thresh'] = args.scene
+if args.nskip:
+    cfg['method'] = 'skip'
+    cfg['frame_skip'] = args.nskip
+if args.nsecs:
+    cfg['method'] = 'time'
+    cfg['time_skip'] = args.nsecs
+if args.iframe:
+    cfg['method'] = 'iframe'
+if args.customvf:
+    cfg['method'] = 'customvf'
+    cfg['customvf'] = args.customvf
+
+# clear unused method parameters
+if cfg['method'] == 'scene':
+    cfg['time_skip'] = None
+    cfg['frame_skip'] = None
+    cfg['customvf'] = None
+elif cfg['method'] == 'skip':
+    cfg['scene_thresh'] = None
+    cfg['time_skip'] = None
+    cfg['customvf'] = None
+elif cfg['method'] == 'time':
+    cfg['scene_thresh'] = None
+    cfg['frame_skip'] = None
+    cfg['customvf'] = None
+elif cfg['method'] == 'customvf':
+    cfg['scene_thresh'] = None
+    cfg['time_skip'] = None
+    cfg['frame_skip'] = None
+elif cfg['method'] == 'iframe':
+    cfg['scene_thresh'] = None
+    cfg['time_skip'] = None
+    cfg['frame_skip'] = None
+    cfg['customvf'] = None
+
+# prepare temp directory
+if not cfg['tmpdir']:
+    cfg['tmpdir'] = tempfile.gettempdir()
 try:
-    os.makedirs(cfg.tmpdir, exist_ok=True)
+    os.makedirs(cfg['tmpdir'], exist_ok=True)
 except Exception as e:
     eprint(str(e))
     exit(1)
-cfg.idxfile = cfg.tmpdir + '/ffpreview.idx'
 
+# parse grid geometry
+grid = re.split('[xX,;:]', cfg['grid'])
+cfg['grid_columns'] = int(grid[0])
+if len(grid) > 1:
+    cfg['grid_rows'] = int(grid[1])
 
-# Initialize thumbnail info structure
-thinfo = {
-    'name': os.path.basename(cfg.vid),
-    'duration': -1,
-    'fps': -1,
-    'start': cfg.start,
-    'end': cfg.end,
-    'count': 0,
-    'width': cfg.thumb_width,
-    'method': cfg.method,
-    'frame_skip': cfg.frame_skip,
-    'time_skip': cfg.time_skip,
-    'scene_thresh': cfg.scene_thresh,
-    'customvf': cfg.customvf,
-    'date':0,
-    'th':[]
-}
-
-
+# end of configuration
 ############################################################
-# try to get video container duration
-
-def get_meta(vidfile):
-    meta = { 'duration':-1, 'fps':-1.0 }
-    global proc
-    try:
-        cmd = 'ffprobe -v error -select_streams v -of json'
-        cmd += ' -show_entries format=duration:stream=avg_frame_rate'
-        cmd += ' "' + vidfile + '"'
-        proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
-        stdout, stderr = proc.communicate()
-        retval = proc.wait()
-        proc = None
-        if retval == 0:
-            info = json.loads(stdout.decode())
-            fr = info['streams'][0]['avg_frame_rate'].split('/')
-            meta['fps'] = round(float(fr[0]) / float(fr[1]), 2)
-            meta['duration'] = int(info['format']['duration'].split('.')[0])
-        else:
-            eprint('ffprobe:')
-            eprint(stderr.decode())
-    except Exception as e:
-        eprint(str(e))
-    return meta
-
-
-############################################################
-# check validity of existing index file
-
-def chk_idxfile():
-    global thinfo
-    try:
-        with open(cfg.idxfile, 'r') as idxfile:
-            chk = json.load(idxfile)
-            if chk['name'] != thinfo['name']:
-                return False
-            if chk['duration'] != thinfo['duration']:
-                return False
-            if chk['start'] != thinfo['start']:
-                return False
-            if chk['end'] != thinfo['end']:
-                return False
-            if chk['count'] != len(chk['th']):
-                return False
-            if not cfg.reuse:
-                if chk['width'] != thinfo['width']:
-                    return False
-                if chk['method'] != thinfo['method']:
-                    return False
-                if chk['frame_skip'] != thinfo['frame_skip']:
-                    return False
-                if chk['scene_thresh'] != thinfo['scene_thresh']:
-                    return False
-                if chk['customvf'] != thinfo['customvf']:
-                    return False
-            # do something with date?
-            thinfo = chk
-            return True
-    except Exception as e:
-        pass
-    return False
-
-
-############################################################
-# extract thumbnails from video and collect timestamps
-
-def make_thumbs(vidfile, ilabel, pbar):
-    global proc
-    pictemplate = '%08d.png'
-    cmd = 'ffmpeg -loglevel info -hide_banner -y'
-    if cfg.start:
-        cmd += ' -ss ' + str(cfg.start)
-    if cfg.end:
-        cmd += ' -to ' + str(cfg.end)
-    cmd += ' -i "' + vidfile + '"'
-    if cfg.method == 'scene':
-        cmd += ' -vf "select=gt(scene\,' + str(cfg.scene_thresh) + ')'
-    elif cfg.method == 'skip':
-        cmd += ' -vf "select=not(mod(n\,' + str(cfg.frame_skip) + '))'
-    elif cfg.method == 'time':
-        fs = int(float(cfg.time_skip) * float(thinfo['fps']))
-        cmd += ' -vf "select=not(mod(n\,' + str(fs) + '))'
-    elif cfg.method == 'customvf':
-        cmd += ' -vf "' + cfg.customvf
-    else: # iframe
-        cmd += ' -vf "select=eq(pict_type\,I)'
-    cmd += ',showinfo,scale=' + str(cfg.thumb_width) + ':-1"'
-    cmd += ' -vsync vfr "' + cfg.tmpdir + '/' + pictemplate + '"'
-    eprint(cmd)
-    ebuf = ''
-    cnt = 0
-    try:
-        proc = Popen('exec ' + cmd, shell=True, stderr=PIPE)
-        while proc.poll() is None:
-            line = proc.stderr.readline()
-            if line:
-                line = line.decode()
-                ebuf += line
-                x = re.search('pts_time:\d*\.?\d*', line)
-                if x is not None:
-                    cnt += 1
-                    t = x.group().split(':')[1]
-                    if cfg.start:
-                        t = str(float(t) + cfg.start)
-                    thinfo['th'].append([ cnt, pictemplate % cnt, t ])
-                    ilabel.config(text='%s / %d s' % (t.split('.')[0], thinfo['duration']))
-                    pbar['value'] = float(t) * 100 / thinfo['duration']
-                    root.update()
-        retval = proc.wait()
-        proc = None
-        if retval != 0:
-            eprint(ebuf)
-            eprint('ffmpeg exit code: %d' % retval)
-            exit(retval)
-        thinfo['count'] = cnt
-        with open(cfg.idxfile, 'w') as idxfile:
-            json.dump(thinfo, idxfile, indent=2)
-    except Exception as e:
-        exit(1)
-
-
-############################################################
-# open video in mpv
-
-def mpv_open(filename, start=None, paused=False):
-    cmd = 'mpv --no-ordered-chapters'
-    if start:
-        cmd += ' --start=' + start
-    if paused:
-        cmd += ' --pause'
-    cmd += ' "' + filename + '"'
-    Popen('exec ' + cmd, shell=True)
 
 
 ############################################################
@@ -382,7 +311,7 @@ Ec1fP40FEpDbSStlk0UTXj/D3sRmYTAYDAbDKP4Bb2zlnKfZbGYAAAAASUVORK5CYII=
 '''
 
 root = tk.Tk(className='ffpreview')
-root.title('ffpreview - '+ cfg.vid)
+root.title('ffpreview - '+ cfg['vid'])
 ffpreview_ico = tk.PhotoImage(data=ffpreview_png)
 broken_img = tk.PhotoImage(data=broken_img_png)
 root.iconphoto(False, ffpreview_ico)
@@ -446,39 +375,187 @@ container.bind_all('<Next>', on_scroll)  # PageDn key
 
 root.update()
 
-############################################################
-# rebuild thumbnails and index, if necessary
 
-proc = None
-thinfo.update(get_meta(cfg.vid))
-thinfo['date'] = int(time.time())
-if cfg.force or not chk_idxfile():
+############################################################
+# Helper functions
+
+# get video container meta information
+def get_meta(vidfile):
+    meta = { 'duration':-1, 'fps':-1.0 }
+    global proc
     try:
-        os.unlink(cfg.idxfile)
+        cmd = cfg['ffprobe'] + ' -v error -select_streams v -of json'
+        cmd += ' -show_entries format=duration:stream=avg_frame_rate'
+        cmd += ' "' + vidfile + '"'
+        proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
+        stdout, stderr = proc.communicate()
+        retval = proc.wait()
+        proc = None
+        if retval == 0:
+            info = json.loads(stdout.decode())
+            fr = info['streams'][0]['avg_frame_rate'].split('/')
+            meta['fps'] = round(float(fr[0]) / float(fr[1]), 2)
+            meta['duration'] = int(info['format']['duration'].split('.')[0])
+        else:
+            eprint('ffprobe:')
+            eprint(stderr.decode())
+    except Exception as e:
+        eprint(str(e))
+    return meta
+
+# extract thumbnails from video and collect timestamps
+def make_thumbs(vidfile, thinfo, ilabel, pbar):
+    global proc
+    pictemplate = '%08d.png'
+    cmd = cfg['ffmpeg'] + ' -loglevel info -hide_banner -y'
+    if cfg['start']:
+        cmd += ' -ss ' + str(cfg['start'])
+    if cfg['end']:
+        cmd += ' -to ' + str(cfg['end'])
+    cmd += ' -i "' + vidfile + '"'
+    if cfg['method'] == 'scene':
+        cmd += ' -vf "select=gt(scene\,' + str(cfg['scene_thresh']) + ')'
+    elif cfg['method'] == 'skip':
+        cmd += ' -vf "select=not(mod(n\,' + str(cfg['frame_skip']) + '))'
+    elif cfg['method'] == 'time':
+        fs = int(float(cfg['time_skip']) * float(thinfo['fps']))
+        cmd += ' -vf "select=not(mod(n\,' + str(fs) + '))'
+    elif cfg['method'] == 'customvf':
+        cmd += ' -vf "' + cfg['customvf']
+    else: # iframe
+        cmd += ' -vf "select=eq(pict_type\,I)'
+    cmd += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1"'
+    cmd += ' -vsync vfr "' + cfg['thdir'] + '/' + pictemplate + '"'
+    eprint(cmd)
+    ebuf = ''
+    cnt = 0
+    try:
+        proc = Popen('exec ' + cmd, shell=True, stderr=PIPE)
+        while proc.poll() is None:
+            line = proc.stderr.readline()
+            if line:
+                line = line.decode()
+                ebuf += line
+                x = re.search('pts_time:\d*\.?\d*', line)
+                if x is not None:
+                    cnt += 1
+                    t = x.group().split(':')[1]
+                    if cfg['start']:
+                        t = str(float(t) + cfg['start'])
+                    thinfo['th'].append([ cnt, pictemplate % cnt, t ])
+                    ilabel.config(text='%s / %d s' % (t.split('.')[0], thinfo['duration']))
+                    pbar['value'] = float(t) * 100 / thinfo['duration']
+                    root.update()
+        retval = proc.wait()
+        proc = None
+        if retval != 0:
+            eprint(ebuf)
+            eprint('ffmpeg exit code: %d' % retval)
+            exit(retval)
+        thinfo['count'] = cnt
+        with open(cfg['idxfile'], 'w') as idxfile:
+            json.dump(thinfo, idxfile, indent=2)
+    except Exception as e:
+        exit(1)
+
+# open video in player
+def play_video(filename, start='0', paused=False):
+    if paused and cfg['plpaused']:
+        cmd = cfg['plpaused']
+    else:
+        cmd = cfg['player']
+    cmd = cmd.replace('%t', '"' + start + '"')
+    cmd = cmd.replace('%f', '"' + filename + '"')
+    eprint(cmd)
+    Popen('exec ' + cmd, shell=True)
+
+# check validity of existing index file
+def chk_idxfile():
+    global thinfo
+    try:
+        with open(cfg['idxfile'], 'r') as idxfile:
+            idx = json.load(idxfile)
+            if idx['name'] != thinfo['name']:
+                return False
+            if idx['duration'] != thinfo['duration']:
+                return False
+            if idx['start'] != thinfo['start']:
+                return False
+            if idx['end'] != thinfo['end']:
+                return False
+            if idx['count'] != len(idx['th']):
+                return False
+            if not cfg['reuse']:
+                if idx['width'] != thinfo['width']:
+                    return False
+                if idx['method'] != thinfo['method']:
+                    return False
+                if idx['frame_skip'] != thinfo['frame_skip']:
+                    return False
+                if idx['scene_thresh'] != thinfo['scene_thresh']:
+                    return False
+                if idx['customvf'] != thinfo['customvf']:
+                    return False
+            thinfo = idx
+            return True
     except Exception as e:
         pass
-    for f in os.listdir(cfg.tmpdir):
+    return False
+
+
+############################################################
+# prepare thumbnails
+
+# initialize thumbnail info structure
+thinfo = {
+    'name': os.path.basename(cfg['vid']),
+    'duration': -1,
+    'fps': -1,
+    'start': cfg['start'],
+    'end': cfg['end'],
+    'count': 0,
+    'width': cfg['thumb_width'],
+    'method': cfg['method'],
+    'frame_skip': cfg['frame_skip'],
+    'time_skip': cfg['time_skip'],
+    'scene_thresh': cfg['scene_thresh'],
+    'customvf': cfg['customvf'],
+    'date': 0,
+    'th': []
+}
+
+# prepare thumbnail directory
+cfg['thdir'] = cfg['tmpdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'])
+try:
+    os.makedirs(cfg['thdir'], exist_ok=True)
+except Exception as e:
+    eprint(str(e))
+    exit(1)
+cfg['idxfile'] = cfg['thdir'] + '/ffpreview.idx'
+
+# rebuild thumbnails and index, if necessary
+thinfo.update(get_meta(cfg['vid']))
+thinfo['date'] = int(time.time())
+if cfg['force'] or not chk_idxfile():
+    try:
+        os.unlink(cfg['idxfile'])
+    except Exception as e:
+        pass
+    for f in os.listdir(cfg['thdir']):
         if re.match('^\d{8}\.png$', f):
             try:
-                os.unlink(cfg.tmpdir + '/' + f)
+                os.unlink(cfg['thdir'] + '/' + f)
             except Exception as e:
                 pass
     statdsp[0].config(text='Processing video:'),
-    make_thumbs(cfg.vid, statdsp[1], progbar)
+    make_thumbs(cfg['vid'], thinfo, statdsp[1], progbar)
 
 
 ############################################################
 # generate clickable thumbnail labels
 
-def s2hms(ts):
-    s, ms = divmod(float(ts), 1.0)
-    m, s = divmod(s, 60)
-    h, m = divmod(m, 60)
-    res = '%d:%02d:%02d%s' % (h, m, s, ('%.3f' % ms).lstrip('0'))
-    return res
-
 def lclick_action(event):
-    mpv_open(cfg.vid, event.widget.th[2], True)
+    play_video(cfg['vid'], event.widget.th[2], True)
 
 def rclick_menu(event):
     def on_pop_focus_out(event):
@@ -493,14 +570,14 @@ def rclick_menu(event):
     popup = tk.Menu(root, tearoff=0)
     popup.bind("<FocusOut>", on_pop_focus_out)
     popup.bind("<Visibility>", on_popup_visible)
-    popup.add_command(label='Open in mpv at timestamp',
-                      command=lambda:mpv_open(cfg.vid, event.widget.th[2], True), font=bfont)
-    popup.add_command(label='Open in mpv', command=lambda:mpv_open(cfg.vid))
+    popup.add_command(label='Open in player at timestamp',
+                      command=lambda:play_video(cfg['vid'], event.widget.th[2], True), font=bfont)
+    popup.add_command(label='Open in player from start', command=lambda:play_video(cfg['vid']))
     popup.add_separator()
     popup.add_command(label='Copy timestamp [H:M:S.ms]', command=lambda:copy2clp(event.widget.cget('text')))
     popup.add_command(label='Copy timestamp [S.ms]', command=lambda:copy2clp(event.widget.th[2]))
     popup.add_separator()
-    popup.add_command(label='Copy original filename', command=lambda:copy2clp(cfg.vid))
+    popup.add_command(label='Copy original filename', command=lambda:copy2clp(cfg['vid']))
     popup.add_command(label='Copy thumb filename', command=lambda:copy2clp(event.widget.img.cget('file')))
     popup.add_separator()
     popup.add_command(label='Quit', command=lambda:die())
@@ -510,7 +587,7 @@ def rclick_menu(event):
         popup.grab_release()
 
 def enter_thumb(event):
-    event.widget.config(bg=cfg.hightlightcolor)
+    event.widget.config(bg=cfg['highlightcolor'])
     inf = event.widget.th
     statdsp[3].config(text=inf[1])
 
@@ -519,17 +596,17 @@ def leave_thumb(event):
     statdsp[3].config(text='')
 
 try:
-    with open(cfg.idxfile, 'r') as idxfile:
+    with open(cfg['idxfile'], 'r') as idxfile:
         idx = json.load(idxfile)
         tlabels=[]
         statdsp[0].config(text='Loading:')
         for th in idx['th']:
             if th[0] % 100 == 0:
-                statdsp[1].config(text='%d / %d' % (th[0], thinfo['count']))
-                progbar['value'] = th[0] * 100 / thinfo['count']
+                statdsp[1].config(text='%d / %d' % (th[0], idx['count']))
+                progbar['value'] = th[0] * 100 / idx['count']
                 root.update()
             try:
-                thumb = tk.PhotoImage(file=cfg.tmpdir + '/' + th[1])
+                thumb = tk.PhotoImage(file=cfg['thdir'] + '/' + th[1])
             except:
                 thumb = broken_img
             tlabel = tk.Label(scrollframe, text=s2hms(th[2]), image=thumb, compound='top', relief='solid')
@@ -541,8 +618,8 @@ try:
             tlabel.bind("<Leave>", leave_thumb)
             tlabels.append(tlabel)
         if len(tlabels) == 0: # no thumbnails available :(
-            tlabel = tk.Label(scrollframe, text=s2hms(str(cfg.start)), image=broken_img, compound='top', relief='solid')
-            tlabel.th = [0, 'broken', str(cfg.start)]
+            tlabel = tk.Label(scrollframe, text=s2hms(str(cfg['start'])), image=broken_img, compound='top', relief='solid')
+            tlabel.th = [0, 'broken', str(cfg['start'])]
             tlabel.img = broken_img
             tlabel.bind('<Button-1>', lclick_action)
             tlabel.bind('<Button-3>', rclick_menu)
@@ -568,15 +645,15 @@ def fill_grid(cols):
             x = 0; y += 1
 
 def on_resize(event):
-    cols = cfg.grid_columns
+    cols = cfg['grid_columns']
     cw = cols * tlwidth
     rw = canvas.winfo_width()
     if rw < cw and cols > 1:
         cols -= 1
     elif rw > cw + tlwidth:
         cols += 1
-    if cols != cfg.grid_columns:
-        cfg.grid_columns = cols
+    if cols != cfg['grid_columns']:
+        cfg['grid_columns'] = cols
         fill_grid(cols)
 
 progbar.forget()
@@ -586,9 +663,9 @@ statdsp[2].config(text=' Method: ' + str(thinfo["method"]))
 canvas.configure(yscrollincrement=tlheight)
 root.bind("<Configure>", on_resize)
 root.minsize(tlwidth, tlheight)
-root.geometry('%dx%d' % (tlwidth*cfg.grid_columns+scrollbar.winfo_reqwidth()+1,
-                         5.2*tlheight+statbar.winfo_reqheight()) )
-fill_grid(cfg.grid_columns)
+root.geometry('%dx%d' % (tlwidth*cfg['grid_columns']+scrollbar.winfo_reqwidth()+1,
+                         tlheight*cfg['grid_rows']+statbar.winfo_reqheight()+1))
+fill_grid(cfg['grid_columns'])
 root.mainloop()
 
 # EOF

@@ -1,0 +1,75 @@
+# Ffpreview example configuration file
+
+[Default]
+
+# Output directory path.
+# A separate subdirectory is created for each video file.
+tmpdir=
+
+# Target width in pixels for thumbnails.
+thumb_width=128
+
+# Initial thumbnail grid geometry, columns [x rows].
+grid=5x5
+
+# Mouse-over thumbnail highlight color. Either a color name or in a
+# hexadecimal color specifier in #RRGGBB notation.
+hightlightcolor=lightsteelblue1
+
+# Path to ffprobe.
+ffprobe=ffprobe
+
+# Path to ffmpeg.
+ffmpeg=ffmpeg
+
+# Video player invocation. The %f placeholder is replaced by the
+# actual video file name.
+# Examples:
+#  player=vlc --start-time=%t %f
+#  player=ffplay -ss %t %f
+#  player=mpv --no-ordered-chapters --start=%t %f
+player=mpv --no-ordered-chapters --start=%t %f
+
+# Video player invocation in paused mode. The %t and %f placeholders
+# are replaced by start timestamp and video file name, respectively.
+# Examples:
+#  plpaused=vlc --start-time=%t --start-paused %f
+#  plpaused=ffplay -ss %t %f
+#  plpaused=mpv --no-ordered-chapters --start=%t --pause %f
+plpaused=mpv --no-ordered-chapters --start=%t --pause %f
+
+# Always rebuild thumbnails, disregarding any existing files.
+force=False
+
+# Reuse existing index file found in the thumbnail directory, if
+# possible. If 'force' is true, this option is ignored.
+# NOTE: Even if this option is not set, ffpreview attempts to reuse
+# existing files, provided all important parameters still apply.
+reuse=False
+
+# Start and end timestamp of time interval to produce thumbnails for.
+# Format: [[hours:]minutes:]seconds.fractions
+start=
+end=
+
+# Thumbnail sampling method. Valid methods are:
+#  iframe   - automatic I-Frame detection (the default)
+#  scene    - scene change detection, see 'scene_thresh'
+#  skip     - skip number of frames between thumbnails, see 'frame_skip'
+#  time     - sample a thumbnail every number of seconds, see 'time_skip'
+#  customvf - custom ffmpeg filter string, see 'customvf'
+method=iframe
+
+# Detection threshold for method 'scene'.
+scene_thresh=0.2
+
+# Number of frames to skip for method 'skip'.
+frame_skip=200
+
+# Number of seconds to skip for method 'time'.
+time_skip=60
+
+# Custom ffmpeg filter string for method 'customvf'.
+customvf=scdet=s=1:t=12
+
+# EOF

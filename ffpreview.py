@@ -84,7 +84,19 @@ def s2hms(ts):
     return res
 
 def str2bool(s):
-    return s.lower() in ['true', '1', 'on', 'y', 'yes']
+    if s:
+        return s.lower() in ['true', '1', 'on', 'y', 'yes']
+    return False
+
+def str2int(s):
+    if s:
+        return int(s)
+    return 0
+
+def str2float(s):
+    if s:
+        return float(s)
+    return 0.0
 
 
 ############################################################
@@ -129,21 +141,21 @@ cfg['idxfile'] = ''
 cfg['grid'] = '5x5'
 cfg['grid_columns'] = 5
 cfg['grid_rows'] = 5
-cfg['thumb_width'] = 128
+cfg['thumb_width'] = '128'
 cfg['highlightcolor'] = 'lightsteelblue1'
 cfg['ffprobe'] = 'ffprobe'
 cfg['ffmpeg'] = 'ffmpeg'
 cfg['player'] = 'mpv --no-ordered-chapters --start=%t %f'
 cfg['plpaused'] = 'mpv --no-ordered-chapters --start=%t --pause %f'
-cfg['force'] = False
-cfg['reuse'] = False
+cfg['force'] = 'False'
+cfg['reuse'] = 'False'
 cfg['method'] = 'iframe'
-cfg['frame_skip'] = None
-cfg['time_skip'] = None
-cfg['scene_thresh'] = None
-cfg['customvf'] = None
-cfg['start'] = None
-cfg['end'] = None
+cfg['frame_skip'] = '-1'
+cfg['time_skip'] = '-1'
+cfg['scene_thresh'] = '-1'
+cfg['customvf'] = ''
+cfg['start'] = '0'
+cfg['end'] = '0'
 
 # parse command line arguments
 parser = argparse.ArgumentParser(
@@ -159,7 +171,7 @@ parser.add_argument('-f', '--force', action='count', help='force thumbnail and i
 parser.add_argument('-r', '--reuse', action='count', help='reuse filter settings from index file')
 parser.add_argument('-i', '--iframe', action='count', help='select only I-frames (default)')
 parser.add_argument('-n', '--nskip', type=int, metavar='N', help='select only every Nth frame')
-parser.add_argument('-N', '--nsecs', type=int, metavar='F', help='select one frame every F seconds')
+parser.add_argument('-N', '--nsecs', type=float, metavar='F', help='select one frame every F seconds')
 parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold; 0 < F < 1')
 parser.add_argument('-C', '--customvf', metavar='S', help='select by custom filter string S')
 parser.add_argument('-S', '--start', metavar='TS', help='start video analysis at time TS')
@@ -178,24 +190,25 @@ if args.config:
 cfgfiles = [defconfpath, cfg['conffile']]
 fconf = ConfigParser(allow_no_value=True, defaults=cfg)
 cf = fconf.read(cfgfiles)
-options = fconf.options('Default')
-for option in options:
-    try:
-        cfg[option] = fconf.get('Default', option)
-        if cfg[option] == '':
-            cfg[option] = None
-    except Exception as e:
-        eprint(str(e))
+try:
+    options = fconf.options('Default')
+    for option in options:
+        try:
+            cfg[option] = fconf.get('Default', option)
+        except Exception as e:
+            eprint(str(e))
+except Exception as e:
+    eprint(str(e))
 
 # fix non-string typed options
 cfg['force'] = str2bool(cfg['force'])
 cfg['reuse'] = str2bool(cfg['reuse'])
-cfg['thumb_width'] = int(cfg['thumb_width'])
-cfg['force'] = bool(cfg['force'])
-cfg['reuse'] = bool(cfg['reuse'])
-cfg['frame_skip'] = int(cfg['frame_skip'])
-cfg['time_skip'] = float(cfg['time_skip'])
-cfg['scene_thresh'] = float(cfg['scene_thresh'])
+cfg['thumb_width'] = str2int(cfg['thumb_width'])
+cfg['frame_skip'] = str2int(cfg['frame_skip'])
+cfg['time_skip'] = str2float(cfg['time_skip'])
+cfg['scene_thresh'] = str2float(cfg['scene_thresh'])
+cfg['start'] = str2float(cfg['start'])
+cfg['end'] = str2float(cfg['end'])
 
 # evaluate remaining command line args
 cfg['vid'] = args.filename

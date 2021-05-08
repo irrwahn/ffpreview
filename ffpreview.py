@@ -656,6 +656,8 @@ def fill_grid(cols):
         x += 1
         if x == cols:
             x = 0; y += 1
+    if cfg['grid_columns']*tlwidth > 32767 or y*tlheight > 32767:
+        eprint('WARNING: grid dimensions exceed maximum size, display will be garbled!')
 
 def on_resize(event):
     cols = cfg['grid_columns']

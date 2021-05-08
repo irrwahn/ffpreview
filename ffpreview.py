@@ -392,13 +392,14 @@ root.update()
 ############################################################
 # Helper functions
 
-# get video container meta information
+# get video meta information
 def get_meta(vidfile):
-    meta = { 'duration':-1, 'fps':-1.0 }
+    meta = { 'frames': -1, 'duration':-1, 'fps':-1.0 }
     global proc
+    # try ffprobe method
     try:
         cmd = cfg['ffprobe'] + ' -v error -select_streams v -of json'
-        cmd += ' -show_entries format=duration:stream=avg_frame_rate'
+        cmd += ' -show_entries stream=nb_frames:stream=duration'
         cmd += ' "' + vidfile + '"'
         proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
         stdout, stderr = proc.communicate()
@@ -406,13 +407,39 @@ def get_meta(vidfile):
         proc = None
         if retval == 0:
             info = json.loads(stdout.decode())
-            fr = info['streams'][0]['avg_frame_rate'].split('/')
-            meta['fps'] = round(float(fr[0]) / float(fr[1]), 2)
-            meta['duration'] = int(info['format']['duration'].split('.')[0])
+            meta['frames'] = int(info['streams'][0]['nb_frames'])
+            d = float(info['streams'][0]['duration'])
+            meta['duration'] = int(d)
+            meta['fps'] = round(meta['frames'] / d, 2)
+            return meta
         else:
-            eprint('ffprobe:')
+            eprint(cmd)
             eprint(stderr.decode())
     except Exception as e:
+        eprint(cmd)
+        eprint(str(e))
+    # ffprobe didn't cut it, try ffmpeg instead
+    try:
+        cmd = cfg['ffmpeg'] + ' -nostats -i "' + vidfile + '"'
+        cmd += ' -c:v copy -f rawvideo -y /dev/null'
+        proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
+        stdout, stderr = proc.communicate()
+        retval = proc.wait()
+        proc = None
+        if retval == 0:
+            for line in io.StringIO(stderr.decode()).readlines():
+                m = re.match(r'^frame=\s*(\d+).*time=\s*(\d+:\d+:\d+(\.\d+)?)', line)
+                if m:
+                    meta['frames'] = int(m.group(1))
+                    d = hms2s(m.group(2))
+                    meta['duration'] = int(d)
+                    meta['fps'] = round(meta['frames'] / d, 2)
+                    return meta
+        else:
+            eprint(cmd)
+            eprint(stderr.decode())
+    except Exception as e:
+        eprint(cmd)
         eprint(str(e))
     return meta
 
@@ -522,6 +549,7 @@ def chk_idxfile():
 # initialize thumbnail info structure
 thinfo = {
     'name': os.path.basename(cfg['vid']),
+    'frames': -1,
     'duration': -1,
     'fps': -1,
     'start': cfg['start'],

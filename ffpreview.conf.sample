@@ -14,7 +14,7 @@ grid=5x5
 
 # Mouse-over thumbnail highlight color. Either a color name or in a
 # hexadecimal color specifier in #RRGGBB notation.
-hightlightcolor=lightblue
+highlightcolor=lightblue
 
 # Path to ffprobe.
 ffprobe=ffprobe

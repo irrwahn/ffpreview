@@ -60,6 +60,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from inspect import currentframe
 
+os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
 
 ############################################################
 # utility functions

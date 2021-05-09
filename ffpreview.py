@@ -651,6 +651,8 @@ def chk_idxfile():
                     return False
                 if idx['frame_skip'] != thinfo['frame_skip']:
                     return False
+                if idx['time_skip'] != thinfo['time_skip']:
+                    return False
                 if idx['scene_thresh'] != thinfo['scene_thresh']:
                     return False
                 if idx['customvf'] != thinfo['customvf']:

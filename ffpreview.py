@@ -735,15 +735,16 @@ try:
                 thumb = broken_img
             tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]), info=th)
             tlabels.append(tlabel)
-        if len(tlabels) == 0: # no thumbnails available :(
-            tlabel = tLabel(pixmap=broken_img, text=s2hms(str(cfg['start'])))
-            tlabel.th = [0, 'broken', str(cfg['start'])]
-            tlabels.append(tlabel)
-        tlwidth = tlabel.width()
-        tlheight = tlabel.height()
 except Exception as e:
     eprint(str(e))
-    exit(2)
+
+if len(tlabels) == 0: # no thumbnails available :(
+    th = [0, 'broken', str(cfg['start'])]
+    tlabel = tLabel(pixmap=broken_img, text=s2hms(str(cfg['start'])), info=th)
+    tlabels.append(tlabel)
+
+tlwidth = tlabel.width()
+tlheight = tlabel.height()
 
 
 ############################################################

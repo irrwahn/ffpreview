@@ -36,6 +36,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
+FFPREVIEW_VERSION = '0.2+'
 
 import sys
 
@@ -65,9 +66,12 @@ os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
 ############################################################
 # utility functions
 
-def eprint(*args, **kwargs):
-    print('LINE %d: ' % currentframe().f_back.f_lineno, file=sys.stderr, end = '')
-    print(*args, file=sys.stderr, **kwargs)
+verbosity = 0
+
+def eprint(lvl=0, *args, **kwargs):
+    if lvl <= verbosity:
+        print('LINE %d: ' % currentframe().f_back.f_lineno, file=sys.stderr, end = '')
+        print(*args, file=sys.stderr, **kwargs)
 
 def hms2s(ts):
     h = 0
@@ -109,7 +113,7 @@ proc = None
 def die(event=None):
     global proc
     if proc is not None:
-        eprint('killing subprocess: %s' % proc.args)
+        eprint(2, 'killing subprocess: %s' % proc.args)
         proc.terminate()
         try:
             proc.wait(timeout=3)
@@ -118,7 +122,7 @@ def die(event=None):
     exit()
 
 def sigint_handler(signum, frame):
-    eprint('ffpreview caught signal %d, exiting.' % signum)
+    eprint(2, 'ffpreview caught signal %d, exiting.' % signum)
     die()
 
 signal.signal(signal.SIGHUP, sigint_handler)
@@ -178,7 +182,13 @@ parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by sc
 parser.add_argument('-C', '--customvf', metavar='S', help='select by custom filter string S')
 parser.add_argument('-S', '--start', metavar='TS', help='start video analysis at time TS')
 parser.add_argument('-E', '--end', metavar='TS', help='end video analysis at time TS')
+parser.add_argument('-v', '--verbose', action='count', help='be more verbose; repeat to increase')
+parser.add_argument('--version', action='count', help='print version info and exit')
 args = parser.parse_args()
+
+if args.version:
+    print('ffpreview version ' + FFPREVIEW_VERSION)
+    exit(0)
 
 # parse config file
 defconfpath = os.path.join( # try to determine user config file
@@ -198,9 +208,9 @@ try:
         try:
             cfg[option] = fconf.get('Default', option)
         except Exception as e:
-            eprint(str(e))
+            eprint(1, str(e))
 except Exception as e:
-    eprint(str(e))
+    eprint(1, str(e))
 
 # fix non-string typed options
 cfg['force'] = str2bool(cfg['force'])
@@ -242,6 +252,8 @@ if args.iframe:
 if args.customvf:
     cfg['method'] = 'customvf'
     cfg['customvf'] = args.customvf
+if args.verbose:
+    verbosity = args.verbose
 
 # clear unused method parameters
 if cfg['method'] == 'scene':
@@ -272,7 +284,7 @@ if not cfg['tmpdir']:
 try:
     os.makedirs(cfg['tmpdir'], exist_ok=True)
 except Exception as e:
-    eprint(str(e))
+    eprint(0, str(e))
     exit(1)
 
 # parse grid geometry
@@ -522,6 +534,7 @@ def get_meta(vidfile):
         cmd = cfg['ffprobe'] + ' -v error -select_streams v:0 -of json -count_packets'
         cmd += ' -show_entries format=duration:stream=nb_read_packets'
         cmd += ' "' + vidfile + '"'
+        eprint(3, cmd)
         proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
         stdout, stderr = proc.communicate()
         retval = proc.wait()
@@ -534,14 +547,15 @@ def get_meta(vidfile):
             meta['fps'] = round(meta['frames'] / d, 2)
             return meta
         else:
-            eprint(cmd)
-            eprint(stderr.decode())
+            eprint(0, cmd + '\n  returned %d' % retval)
+            eprint(2, stderr.decode())
     except Exception as e:
-        eprint(cmd + '\n  failed: ' + str(e))
+        eprint(0, cmd + '\n  failed: ' + str(e))
     # ffprobe didn't cut it, try ffmpeg instead
     try:
         cmd = cfg['ffmpeg'] + ' -nostats -i "' + vidfile + '"'
         cmd += ' -c:v copy -f rawvideo -y /dev/null'
+        eprint(3, cmd)
         proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
         stdout, stderr = proc.communicate()
         retval = proc.wait()
@@ -556,10 +570,10 @@ def get_meta(vidfile):
                     meta['fps'] = round(meta['frames'] / d, 2)
                     return meta
         else:
-            eprint(cmd)
-            eprint(stderr.decode())
+            eprint(0, cmd + '\n  returned %d' % retval)
+            eprint(2, stderr.decode())
     except Exception as e:
-        eprint(cmd + '\n  failed: ' + str(e))
+        eprint(0, cmd + '\n  failed: ' + str(e))
     return meta
 
 # extract thumbnails from video and collect timestamps
@@ -585,7 +599,7 @@ def make_thumbs(vidfile, thinfo, ilabel, pbar):
         cmd += ' -vf "select=eq(pict_type\,I)'
     cmd += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1"'
     cmd += ' -vsync vfr "' + cfg['thdir'] + '/' + pictemplate + '"'
-    eprint(cmd)
+    eprint(3, cmd)
     ebuf = ''
     cnt = 0
     try:
@@ -609,13 +623,14 @@ def make_thumbs(vidfile, thinfo, ilabel, pbar):
         retval = proc.wait()
         proc = None
         if retval != 0:
-            eprint(ebuf)
-            eprint('ffmpeg exit code: %d' % retval)
+            eprint(0, cmd + '\n  returned %d' % retval)
+            eprint(2, ebuf)
             exit(retval)
         thinfo['count'] = cnt
         with open(cfg['idxfile'], 'w') as idxfile:
             json.dump(thinfo, idxfile, indent=2)
     except Exception as e:
+        eprint(0, cmd + '\n  failed: ' + str(e))
         exit(1)
 
 # open video in player
@@ -626,7 +641,7 @@ def play_video(filename, start='0', paused=False):
         cmd = cfg['player']
     cmd = cmd.replace('%t', '"' + start + '"')
     cmd = cmd.replace('%f', '"' + filename + '"')
-    eprint(cmd)
+    eprint(3, cmd)
     Popen('exec ' + cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
 
 # check validity of existing index file
@@ -692,7 +707,7 @@ cfg['thdir'] = cfg['tmpdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'
 try:
     os.makedirs(cfg['thdir'], exist_ok=True)
 except Exception as e:
-    eprint(str(e))
+    eprint(0, str(e))
     exit(1)
 cfg['idxfile'] = cfg['thdir'] + '/ffpreview.idx'
 
@@ -701,6 +716,9 @@ statdsp[0].setText('Analysing ...'),
 QApplication.processEvents()
 thinfo.update(get_meta(cfg['vid']))
 thinfo['date'] = int(time.time())
+if verbosity > 3:
+    eprint(4, 'cfg = ' + json.dumps(cfg, indent=2))
+    eprint(4, 'thinfo = ' + json.dumps(thinfo, indent=2))
 if cfg['force'] or not chk_idxfile():
     try:
         os.unlink(cfg['idxfile'])
@@ -722,6 +740,8 @@ if cfg['force'] or not chk_idxfile():
 try:
     with open(cfg['idxfile'], 'r') as idxfile:
         idx = json.load(idxfile)
+        if verbosity > 3:
+            eprint(4, 'idx = ' + json.dumps(idx, indent=2))
         tlabels = []
         statdsp[0].setText('Loading:')
         progbar.show()
@@ -737,7 +757,7 @@ try:
             tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]), info=th)
             tlabels.append(tlabel)
 except Exception as e:
-    eprint(str(e))
+    eprint(0, str(e))
 
 if len(tlabels) == 0: # no thumbnails available :(
     th = [0, 'broken', str(cfg['start'])]

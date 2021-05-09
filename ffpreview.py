@@ -405,7 +405,7 @@ class tLabel(QWidget):
             die()
 
 class sMainWindow(QMainWindow):
-    def __init__(self, *args, pixmap=None, text=None, info=None, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     def closeEvent(self, event):
         self.close()

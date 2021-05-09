@@ -626,7 +626,7 @@ def play_video(filename, start='0', paused=False):
     cmd = cmd.replace('%t', '"' + start + '"')
     cmd = cmd.replace('%f', '"' + filename + '"')
     eprint(cmd)
-    Popen('exec ' + cmd, shell=True)
+    Popen('exec ' + cmd + ' & disown', shell=True, start_new_session=True)
 
 # check validity of existing index file
 def chk_idxfile():

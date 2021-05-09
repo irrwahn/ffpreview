@@ -53,7 +53,7 @@ import tempfile
 import argparse
 import json
 from configparser import RawConfigParser as ConfigParser
-from subprocess import PIPE, Popen
+from subprocess import PIPE, Popen, DEVNULL
 import base64
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
@@ -626,7 +626,7 @@ def play_video(filename, start='0', paused=False):
     cmd = cmd.replace('%t', '"' + start + '"')
     cmd = cmd.replace('%f', '"' + filename + '"')
     eprint(cmd)
-    Popen('exec ' + cmd, shell=True, start_new_session=True)
+    Popen('exec ' + cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
 
 # check validity of existing index file
 def chk_idxfile():

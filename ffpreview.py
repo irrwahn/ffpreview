@@ -404,12 +404,19 @@ class tLabel(QWidget):
         elif action == quit_action:
             die()
 
+class sMainWindow(QMainWindow):
+    def __init__(self, *args, pixmap=None, text=None, info=None, **kwargs):
+        super().__init__(*args, **kwargs)
+    def closeEvent(self, event):
+        self.close()
+        die()
+
 app = QApplication(sys.argv)
 app.setApplicationName('ffpreview')
 clipboard = QApplication.clipboard()
 broken_img = sQPixmap(imgdata=broken_img_png)
 ffpreview_ico = sQIcon(imgdata=ffpreview_png)
-root = QMainWindow()
+root = sMainWindow()
 root.setWindowTitle('ffpreview - ' + cfg['vid'])
 root.resize(500, 300)
 root.setWindowIcon(ffpreview_ico)

@@ -54,9 +54,10 @@ import argparse
 import json
 from configparser import RawConfigParser as ConfigParser
 from subprocess import PIPE, Popen
-import tkinter as tk
-from tkinter import ttk
-from tkinter import font
+import base64
+from PyQt5.QtCore import *
+from PyQt5.QtWidgets import *
+from PyQt5.QtGui import *
 from inspect import currentframe
 
 
@@ -142,7 +143,7 @@ cfg['grid'] = '5x5'
 cfg['grid_columns'] = 5
 cfg['grid_rows'] = 5
 cfg['thumb_width'] = '128'
-cfg['highlightcolor'] = 'lightsteelblue1'
+cfg['highlightcolor'] = 'lightblue'
 cfg['ffprobe'] = 'ffprobe'
 cfg['ffmpeg'] = 'ffmpeg'
 cfg['player'] = 'mpv --no-ordered-chapters --start=%t %f'
@@ -323,70 +324,182 @@ HsfcSymMAEYWfad9L8TO9LVBgE6iSWykbgOdhrc8ZR3OcCTZUpFrBHPnDzMcJcCwpFztAJbH0Sk2jybP
 Ec1fP40FEpDbSStlk0UTXj/D3sRmYTAYDAbDKP4Bb2zlnKfZbGYAAAAASUVORK5CYII=
 '''
 
-root = tk.Tk(className='ffpreview')
-root.title('ffpreview - '+ cfg['vid'])
-ffpreview_ico = tk.PhotoImage(data=ffpreview_png)
-broken_img = tk.PhotoImage(data=broken_img_png)
-root.iconphoto(False, ffpreview_ico)
-root.bind('<Escape>', die)
-root.bind('<Control-w>', die)
-root.bind('<Control-q>', die)
+class sQPixmap(QPixmap):
+    def __init__(self, *args, imgdata=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if imgdata is not None:
+            super().loadFromData(base64.b64decode(imgdata))
 
-statbar = tk.Frame(root)
-statbar.pack(side='bottom', fill='x')
+class sQIcon(QIcon):
+    def __init__(self, *args, imgdata=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if imgdata is not None:
+            super().addPixmap(sQPixmap(imgdata=imgdata))
+
+class tLabel(QWidget):
+    def __init__(self, *args, pixmap=None, text=None, info=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        layout = QVBoxLayout()
+        layout.setSpacing(0)
+        layout.setContentsMargins(0,0,0,0)
+        self.setLayout(layout)
+        self.layout = layout
+        if pixmap is not None:
+            pl = QLabel()
+            pl.setPixmap(pixmap)
+            pl.adjustSize()
+            pl.setAlignment(Qt.AlignCenter)
+            layout.addWidget(pl)
+        if text is not None:
+            tl = QLabel()
+            tl.setText(text)
+            tl.adjustSize()
+            tl.setAlignment(Qt.AlignCenter)
+            layout.addWidget(tl)
+        if info is not None:
+            self.info = info
+        self.adjustSize()
+        self.setStyleSheet('::hover {background-color: ' + cfg['highlightcolor'] + ';}')
+
+    def enterEvent(self, event):
+        statdsp[3].setText(self.info[1])
+
+    def leaveEvent(self, event):
+        statdsp[3].setText('')
+
+    def mouseReleaseEvent(self, event):
+        button = event.button()
+        #modifiers = event.modifiers()
+        if button == Qt.LeftButton:
+            play_video(cfg['vid'], self.info[2], True)
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        play_here_action = menu.addAction('Play from here')
+        play_start_action = menu.addAction('Play from start')
+        menu.addSeparator()
+        copy_ts1_action = menu.addAction('Copy timestamp [H:M:S.ms]')
+        copy_ts2_action = menu.addAction('Copy timestamp [S.ms]')
+        menu.addSeparator()
+        copy_filename_action = menu.addAction('Copy original filename')
+        copy_thumbname_action = menu.addAction('Copy thumb filename')
+        copy_thumb_action = menu.addAction('Copy thumbnail image')
+        menu.addSeparator()
+        quit_action = menu.addAction('Quit')
+        action = menu.exec_(self.mapToGlobal(event.pos()))
+        if action == play_here_action:
+            play_video(cfg['vid'], self.info[2])
+        elif action == play_start_action:
+            play_video(cfg['vid'])
+        elif action == copy_ts1_action:
+            clipboard.setText(s2hms(self.info[2]))
+        elif action == copy_ts2_action:
+            clipboard.setText(self.info[2])
+        elif action == copy_filename_action:
+            clipboard.setText(cfg['vid'])
+        elif action == copy_thumbname_action:
+            clipboard.setText(cfg['thdir'] + '/' + self.info[1])
+        elif action == copy_thumb_action:
+            clipboard.setPixmap(self.layout.itemAt(0).widget().pixmap())
+        elif action == quit_action:
+            die()
+
+app = QApplication(sys.argv)
+app.setApplicationName('ffpreview')
+clipboard = QApplication.clipboard()
+broken_img = sQPixmap(imgdata=broken_img_png)
+ffpreview_ico = sQIcon(imgdata=ffpreview_png)
+root = QMainWindow()
+root.setWindowTitle('ffpreview - ' + cfg['vid'])
+root.resize(500, 300)
+root.setWindowIcon(ffpreview_ico)
+QShortcut('Esc', root).activated.connect(die)
+QShortcut('Ctrl+Q', root).activated.connect(die)
+QShortcut('Ctrl+W', root).activated.connect(die)
+
+statbar = QHBoxLayout()
 statdsp = []
 for i in range(4):
-    s = tk.Label(statbar, text='', width=20, height=1, relief='flat', anchor='sw')
-    s.pack(side='left', fill='x')
+    s = QLabel('')
+    s.resize(100, 20)
     statdsp.append(s)
-progbar = ttk.Progressbar(statbar, orient=tk.HORIZONTAL, length=100, mode='determinate')
-progbar.pack(expand=True)
+    statbar.addWidget(s)
+progbar = QProgressBar()
+progbar.resize(100, 20)
+progbar.hide()
+statbar.addWidget(progbar)
 
-container = tk.Frame(root)
-container.pack(fill='both', expand=True)
-canvas = tk.Canvas(container)
-canvas.pack(side='left', fill='both', expand=True)
-scrollbar = ttk.Scrollbar(container, orient='vertical', command=canvas.yview)
-scrollbar.pack(side='right', fill='y')
-scrollframe = tk.Frame(canvas)
-scrollframe.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
-canvas.create_window((0, 0), window=scrollframe, anchor='nw')
-canvas.configure(yscrollcommand=scrollbar.set)
+thumb_layout = QGridLayout()
+thumb_layout.setContentsMargins(0, 0, 0, 0)
+thumb_layout.setHorizontalSpacing(0)
+thumb_layout.setHorizontalSpacing(0)
+tlwidth = tlheight = 0
+tlabels = []
 
-def on_scroll(event):
-    if event.keysym == 'Next':
-        canvas.yview_scroll(1, 'pages')
-    elif event.keysym == 'Prior':
-        canvas.yview_scroll(-1, 'pages')
-    elif event.keysym == 'Home':
-        canvas.yview_moveto(0)
-    elif event.keysym == 'End':
-        canvas.yview_moveto(1)
-    elif event.num == 5 or event.delta == -120 or event.keysym == 'Down':
-        canvas.yview_scroll(1, 'units')
-    elif event.num == 4 or event.delta == 120 or event.keysym == 'Up':
-        canvas.yview_scroll(-1, 'units')
+def fill_grid(cols):
+    thumb_layout.parent().setUpdatesEnabled(False)
+    x = 0; y = 0
+    for tl in tlabels:
+        thumb_layout.removeWidget(tl)
+        thumb_layout.addWidget(tl, y, x)
+        x += 1
+        if x >= cols:
+            x = 0; y += 1
+    thumb_layout.parent().setUpdatesEnabled(True)
 
-def bind_mousewheel(event):
-    canvas.bind_all('<MouseWheel>', on_scroll) # Windows mouse wheel event
-    canvas.bind_all('<Button-4>', on_scroll) # Linux mouse wheel event (Up)
-    canvas.bind_all('<Button-5>', on_scroll) # Linux mouse wheel event (Down)
+class tScrollArea(QScrollArea):
+    def __init__(self, *args, imgdata=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.delayTimeout = 200
+        self._resizeTimer = QTimer(self)
+        self._resizeTimer.timeout.connect(self._delayedUpdate)
 
-def unbind_mousewheel(event):
-    canvas.unbind_all('<MouseWheel>')
-    canvas.unbind_all('<Button-4>')
-    canvas.unbind_all('<Button-5>')
+    def resizeEvent(self, event):
+        self._resizeTimer.start(self.delayTimeout)
+        super().resizeEvent(event)
 
-container.bind_all('<Enter>', bind_mousewheel)
-container.bind_all('<Leave>', unbind_mousewheel)
-container.bind_all('<Up>', on_scroll)    # CursorUp key
-container.bind_all('<Down>', on_scroll)  # CursorDown key
-container.bind_all('<Home>', on_scroll)  # Home key
-container.bind_all('<End>', on_scroll)   # End key
-container.bind_all('<Prior>', on_scroll) # PageUp key
-container.bind_all('<Next>', on_scroll)  # PageDn key
+    def _delayedUpdate(self):
+        self._resizeTimer.stop()
+        if tlwidth < 1 or tlheight < 1:
+            return
+        hstep = tlheight + 6
+        rows = int(self.viewport().height() / hstep)
+        self.verticalScrollBar().setPageStep(rows * hstep)
+        self.verticalScrollBar().setSingleStep(hstep)
+        cfg['grid_rows'] = rows
+        cols = int((self.viewport().width() + 1) / tlwidth)
+        if cols < 1:
+            cols = 1
+        if cols != cfg['grid_columns']:
+            cfg['grid_columns'] = cols
+            fill_grid(cols)
 
-root.update()
+main_frame = QWidget()
+main_layout = QVBoxLayout(main_frame)
+main_layout.setContentsMargins(0, 0, 0, 0)
+
+scrollframe = QFrame()
+scrollframe.setLayout(thumb_layout)
+scroll = tScrollArea()
+scroll.setWidget(scrollframe)
+scroll.setWidgetResizable(True)
+scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+main_layout.addWidget(scroll)
+main_layout.addLayout(statbar)
+
+def do_scroll(event):
+    if event == 'Home':
+        scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().minimum());
+    elif event == 'End':
+        scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum());
+
+QShortcut('Home', root).activated.connect(lambda: do_scroll('Home'))
+QShortcut('End', root).activated.connect(lambda: do_scroll('End'))
+
+root.setCentralWidget(main_frame)
+root.show()
 
 
 ############################################################
@@ -468,6 +581,7 @@ def make_thumbs(vidfile, thinfo, ilabel, pbar):
     ebuf = ''
     cnt = 0
     try:
+        progbar.show()
         proc = Popen('exec ' + cmd, shell=True, stderr=PIPE)
         while proc.poll() is None:
             line = proc.stderr.readline()
@@ -481,9 +595,9 @@ def make_thumbs(vidfile, thinfo, ilabel, pbar):
                     if cfg['start']:
                         t = str(float(t) + cfg['start'])
                     thinfo['th'].append([ cnt, pictemplate % cnt, t ])
-                    ilabel.config(text='%s / %d s' % (t.split('.')[0], thinfo['duration']))
-                    pbar['value'] = float(t) * 100 / thinfo['duration']
-                    root.update()
+                    ilabel.setText('%s / %d s' % (t.split('.')[0], thinfo['duration']))
+                    pbar.setValue(float(t) * 100 / thinfo['duration'])
+                    QApplication.processEvents()
         retval = proc.wait()
         proc = None
         if retval != 0:
@@ -573,6 +687,8 @@ except Exception as e:
 cfg['idxfile'] = cfg['thdir'] + '/ffpreview.idx'
 
 # rebuild thumbnails and index, if necessary
+statdsp[0].setText('Analysing ...'),
+QApplication.processEvents()
 thinfo.update(get_meta(cfg['vid']))
 thinfo['date'] = int(time.time())
 if cfg['force'] or not chk_idxfile():
@@ -586,87 +702,36 @@ if cfg['force'] or not chk_idxfile():
                 os.unlink(cfg['thdir'] + '/' + f)
             except Exception as e:
                 pass
-    statdsp[0].config(text='Processing video:'),
+    statdsp[0].setText('Processing video:'),
     make_thumbs(cfg['vid'], thinfo, statdsp[1], progbar)
 
 
 ############################################################
 # generate clickable thumbnail labels
 
-def lclick_action(event):
-    play_video(cfg['vid'], event.widget.th[2], True)
-
-def rclick_menu(event):
-    def on_pop_focus_out(event):
-        popup.destroy()
-    def on_popup_visible(event):
-        popup.grab_set_global()
-    def copy2clp(txt):
-        root.clipboard_clear()
-        root.clipboard_append(txt)
-    bfont = tk.font.Font(font='TkMenuFont')
-    bfont.configure(weight=tk.font.BOLD)
-    popup = tk.Menu(root, tearoff=0)
-    popup.bind("<FocusOut>", on_pop_focus_out)
-    popup.bind("<Visibility>", on_popup_visible)
-    popup.add_command(label='Open in player at timestamp',
-                      command=lambda:play_video(cfg['vid'], event.widget.th[2], True), font=bfont)
-    popup.add_command(label='Open in player from start', command=lambda:play_video(cfg['vid']))
-    popup.add_separator()
-    popup.add_command(label='Copy timestamp [H:M:S.ms]', command=lambda:copy2clp(event.widget.cget('text')))
-    popup.add_command(label='Copy timestamp [S.ms]', command=lambda:copy2clp(event.widget.th[2]))
-    popup.add_separator()
-    popup.add_command(label='Copy original filename', command=lambda:copy2clp(cfg['vid']))
-    popup.add_command(label='Copy thumb filename', command=lambda:copy2clp(event.widget.img.cget('file')))
-    popup.add_separator()
-    popup.add_command(label='Quit', command=lambda:die())
-    try:
-        popup.tk_popup(event.x_root, event.y_root)
-    finally:
-        popup.grab_release()
-
-def enter_thumb(event):
-    event.widget.config(bg=cfg['highlightcolor'])
-    inf = event.widget.th
-    statdsp[3].config(text=inf[1])
-
-def leave_thumb(event):
-    event.widget.config(bg=scrollframe['background'])
-    statdsp[3].config(text='')
-
 try:
     with open(cfg['idxfile'], 'r') as idxfile:
         idx = json.load(idxfile)
-        tlabels=[]
-        statdsp[0].config(text='Loading:')
+        tlabels = []
+        statdsp[0].setText('Loading:')
+        progbar.show()
         for th in idx['th']:
             if th[0] % 100 == 0:
-                statdsp[1].config(text='%d / %d' % (th[0], idx['count']))
-                progbar['value'] = th[0] * 100 / idx['count']
-                root.update()
+                statdsp[1].setText('%d / %d' % (th[0], idx['count']))
+                progbar.setValue(th[0] * 100 / idx['count'])
+                QApplication.processEvents()
             try:
-                thumb = tk.PhotoImage(file=cfg['thdir'] + '/' + th[1])
+                thumb = QPixmap(cfg['thdir'] + '/' + th[1])
             except:
                 thumb = broken_img
-            tlabel = tk.Label(scrollframe, text=s2hms(th[2]), image=thumb, compound='top', relief='solid')
-            tlabel.th = th
-            tlabel.img = thumb
-            tlabel.bind('<Button-1>', lclick_action)
-            tlabel.bind('<Button-3>', rclick_menu)
-            tlabel.bind("<Enter>", enter_thumb)
-            tlabel.bind("<Leave>", leave_thumb)
+            tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]), info=th)
             tlabels.append(tlabel)
         if len(tlabels) == 0: # no thumbnails available :(
-            tlabel = tk.Label(scrollframe, text=s2hms(str(cfg['start'])), image=broken_img, compound='top', relief='solid')
+            tlabel = tLabel(pixmap=broken_img, text=s2hms(str(cfg['start'])))
             tlabel.th = [0, 'broken', str(cfg['start'])]
-            tlabel.img = broken_img
-            tlabel.bind('<Button-1>', lclick_action)
-            tlabel.bind('<Button-3>', rclick_menu)
-            tlabel.bind("<Enter>", enter_thumb)
-            tlabel.bind("<Leave>", leave_thumb)
             tlabels.append(tlabel)
-        tlwidth = tlabel.winfo_reqwidth()
-        tlheight = tlabel.winfo_reqheight()
+        tlwidth = tlabel.width()
+        tlheight = tlabel.height()
 except Exception as e:
     eprint(str(e))
     exit(2)
@@ -675,38 +740,23 @@ except Exception as e:
 ############################################################
 # fix window geometry, start main loop
 
-def fill_grid(cols):
-    x = 0; y = 0
-    for tl in tlabels:
-        tl.grid(column=x, row=y)
-        x += 1
-        if x == cols:
-            x = 0; y += 1
-    if cfg['grid_columns']*tlwidth > 32767 or y*tlheight > 32767:
-        eprint('WARNING: grid dimensions exceed maximum size, display will be garbled!')
+scwidth = qApp.style().pixelMetric(QStyle.PM_ScrollBarExtent) * 2
+root.resize(tlwidth*cfg['grid_columns']+scwidth, tlheight*cfg['grid_rows']+scwidth)
+root.setMinimumSize(tlwidth+scwidth, tlheight+scwidth)
 
-def on_resize(event):
-    cols = cfg['grid_columns']
-    cw = cols * tlwidth
-    rw = canvas.winfo_width()
-    if rw < cw and cols > 1:
-        cols -= 1
-    elif rw > cw + tlwidth:
-        cols += 1
-    if cols != cfg['grid_columns']:
-        cfg['grid_columns'] = cols
-        fill_grid(cols)
+progbar.hide()
+statdsp[0].setText(' Generating view ...')
+statdsp[1].setText('')
+statdsp[2].setText('')
+QApplication.processEvents()
 
-progbar.forget()
-statdsp[0].config(text=' Duration: ' + str(thinfo["duration"]) + ' s')
-statdsp[1].config(text=' Thumbs: ' + str(thinfo["count"]))
-statdsp[2].config(text=' Method: ' + str(thinfo["method"]))
-canvas.configure(yscrollincrement=tlheight)
-root.bind("<Configure>", on_resize)
-root.minsize(tlwidth, tlheight)
-root.geometry('%dx%d' % (tlwidth*cfg['grid_columns']+scrollbar.winfo_reqwidth()+1,
-                         tlheight*cfg['grid_rows']+statbar.winfo_reqheight()+1))
 fill_grid(cfg['grid_columns'])
-root.mainloop()
+statdsp[0].setText(' Duration: ' + str(thinfo["duration"]) + ' s')
+statdsp[1].setText(' Thumbs: ' + str(thinfo["count"]))
+statdsp[2].setText(' Method: ' + str(thinfo["method"]))
+QApplication.processEvents()
+
+exit(app.exec_())
+
 
 # EOF

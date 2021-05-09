@@ -748,7 +748,7 @@ except Exception as e:
 # fix window geometry, start main loop
 
 scwidth = qApp.style().pixelMetric(QStyle.PM_ScrollBarExtent) * 2
-root.resize(tlwidth*cfg['grid_columns']+scwidth, tlheight*cfg['grid_rows']+scwidth)
+root.resize(tlwidth*cfg['grid_columns']+scwidth, (tlheight + 6)*cfg['grid_rows']+22)
 root.setMinimumSize(tlwidth+scwidth, tlheight+scwidth)
 
 progbar.hide()

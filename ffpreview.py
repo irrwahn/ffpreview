@@ -398,8 +398,8 @@ def get_meta(vidfile):
     global proc
     # try ffprobe method
     try:
-        cmd = cfg['ffprobe'] + ' -v error -select_streams v -of json'
-        cmd += ' -show_entries stream=nb_frames:stream=duration'
+        cmd = cfg['ffprobe'] + ' -v error -select_streams v:0 -of json -count_packets'
+        cmd += ' -show_entries format=duration:stream=nb_read_packets'
         cmd += ' "' + vidfile + '"'
         proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
         stdout, stderr = proc.communicate()
@@ -407,8 +407,8 @@ def get_meta(vidfile):
         proc = None
         if retval == 0:
             info = json.loads(stdout.decode())
-            meta['frames'] = int(info['streams'][0]['nb_frames'])
-            d = float(info['streams'][0]['duration'])
+            meta['frames'] = int(info['streams'][0]['nb_read_packets'])
+            d = float(info['format']['duration'])
             meta['duration'] = int(d)
             meta['fps'] = round(meta['frames'] / d, 2)
             return meta
@@ -416,8 +416,7 @@ def get_meta(vidfile):
             eprint(cmd)
             eprint(stderr.decode())
     except Exception as e:
-        eprint(cmd)
-        eprint(str(e))
+        eprint(cmd + '\n  failed: ' + str(e))
     # ffprobe didn't cut it, try ffmpeg instead
     try:
         cmd = cfg['ffmpeg'] + ' -nostats -i "' + vidfile + '"'
@@ -439,8 +438,7 @@ def get_meta(vidfile):
             eprint(cmd)
             eprint(stderr.decode())
     except Exception as e:
-        eprint(cmd)
-        eprint(str(e))
+        eprint(cmd + '\n  failed: ' + str(e))
     return meta
 
 # extract thumbnails from video and collect timestamps

@@ -287,6 +287,15 @@ except Exception as e:
     eprint(0, str(e))
     exit(1)
 
+# prepare thumbnail directory
+cfg['thdir'] = cfg['tmpdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'])
+try:
+    os.makedirs(cfg['thdir'], exist_ok=True)
+except Exception as e:
+    eprint(0, str(e))
+    exit(1)
+cfg['idxfile'] = cfg['thdir'] + '/ffpreview.idx'
+
 # parse grid geometry
 grid = re.split('[xX,;:]', cfg['grid'])
 cfg['grid_columns'] = int(grid[0])
@@ -388,41 +397,47 @@ class tLabel(QWidget):
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)
-        play_here_action = menu.addAction('Play from here')
-        play_start_action = menu.addAction('Play from start')
+        menu.addAction('Play from here',
+                    lambda: play_video(cfg['vid'], self.info[2]))
+        menu.addAction('Play from start',
+                    lambda: play_video(cfg['vid']))
         menu.addSeparator()
-        copy_ts1_action = menu.addAction('Copy timestamp [H:M:S.ms]')
-        copy_ts2_action = menu.addAction('Copy timestamp [S.ms]')
+        menu.addAction('Copy timestamp [H:M:S.ms]',
+                    lambda: clipboard.setText(s2hms(self.info[2])))
+        menu.addAction('Copy timestamp [S.ms]',
+                    lambda: clipboard.setText(self.info[2]))
         menu.addSeparator()
-        copy_filename_action = menu.addAction('Copy original filename')
-        copy_thumbname_action = menu.addAction('Copy thumb filename')
-        copy_thumb_action = menu.addAction('Copy thumbnail image')
+        menu.addAction('Copy original filename',
+                    lambda: clipboard.setText(cfg['vid']))
+        menu.addAction('Copy thumb filename',
+                    lambda: clipboard.setText(cfg['thdir'] + '/' + self.info[1]))
+        menu.addAction('Copy thumbnail image',
+                    lambda: clipboard.setPixmap(self.layout.itemAt(0).widget().pixmap()))
         menu.addSeparator()
-        quit_action = menu.addAction('Quit')
-        action = menu.exec_(self.mapToGlobal(event.pos()))
-        if action == play_here_action:
-            play_video(cfg['vid'], self.info[2])
-        elif action == play_start_action:
-            play_video(cfg['vid'])
-        elif action == copy_ts1_action:
-            clipboard.setText(s2hms(self.info[2]))
-        elif action == copy_ts2_action:
-            clipboard.setText(self.info[2])
-        elif action == copy_filename_action:
-            clipboard.setText(cfg['vid'])
-        elif action == copy_thumbname_action:
-            clipboard.setText(cfg['thdir'] + '/' + self.info[1])
-        elif action == copy_thumb_action:
-            clipboard.setPixmap(self.layout.itemAt(0).widget().pixmap())
-        elif action == quit_action:
-            die()
+        menu.addAction('Optimize window extent', lambda: self.window().optimize_extent())
+        menu.addSeparator()
+        menu.addAction('Quit', lambda: die())
+        menu.exec_(self.mapToGlobal(event.pos()))
+
 
 class sMainWindow(QMainWindow):
+    px = 50
+    py = 50
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
     def closeEvent(self, event):
         self.close()
         die()
+
+    def calculate_props(self, ref):
+        self.px = self.width() - ref.viewport().width()
+        self.py = self.height() - ref.viewport().height()
+
+    def optimize_extent(self):
+        w = tlwidth * cfg['grid_columns'] + self.px
+        h = tlheight * cfg['grid_rows'] + self.py
+        self.resize(w, h)
 
 app = QApplication(sys.argv)
 app.setApplicationName('ffpreview')
@@ -436,6 +451,7 @@ root.setWindowIcon(ffpreview_ico)
 QShortcut('Esc', root).activated.connect(die)
 QShortcut('Ctrl+Q', root).activated.connect(die)
 QShortcut('Ctrl+W', root).activated.connect(die)
+QShortcut('Ctrl+G', root).activated.connect(root.optimize_extent)
 
 statbar = QHBoxLayout()
 statdsp = []
@@ -482,12 +498,11 @@ class tScrollArea(QScrollArea):
         self._resizeTimer.stop()
         if tlwidth < 1 or tlheight < 1:
             return
-        hstep = tlheight + 6
-        rows = int(self.viewport().height() / hstep)
-        self.verticalScrollBar().setPageStep(rows * hstep)
-        self.verticalScrollBar().setSingleStep(hstep)
+        rows = int(self.viewport().height() / tlheight + 0.5)
+        self.verticalScrollBar().setPageStep((rows - 1) * tlheight)
+        self.verticalScrollBar().setSingleStep(tlheight)
         cfg['grid_rows'] = rows
-        cols = int((self.viewport().width() + 1) / tlwidth)
+        cols = int((self.viewport().width()) / tlwidth)
         if cols < 1:
             cols = 1
         if cols != cfg['grid_columns']:
@@ -496,11 +511,12 @@ class tScrollArea(QScrollArea):
 
 main_frame = QWidget()
 main_layout = QVBoxLayout(main_frame)
-main_layout.setContentsMargins(0, 0, 0, 0)
+main_layout.setContentsMargins(0, 4, 0, 0)
 
 scrollframe = QFrame()
 scrollframe.setLayout(thumb_layout)
 scroll = tScrollArea()
+scroll.setStyleSheet('QFrame {border: none;}')
 scroll.setWidget(scrollframe)
 scroll.setWidgetResizable(True)
 scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -508,6 +524,7 @@ scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
 main_layout.addWidget(scroll)
 main_layout.addLayout(statbar)
+root.setCentralWidget(main_frame)
 
 def do_scroll(event):
     if event == 'Home':
@@ -517,9 +534,6 @@ def do_scroll(event):
 
 QShortcut('Home', root).activated.connect(lambda: do_scroll('Home'))
 QShortcut('End', root).activated.connect(lambda: do_scroll('End'))
-
-root.setCentralWidget(main_frame)
-root.show()
 
 
 ############################################################
@@ -629,6 +643,7 @@ def make_thumbs(vidfile, thinfo, ilabel, pbar):
         thinfo['count'] = cnt
         with open(cfg['idxfile'], 'w') as idxfile:
             json.dump(thinfo, idxfile, indent=2)
+        return thinfo
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
         exit(1)
@@ -645,8 +660,7 @@ def play_video(filename, start='0', paused=False):
     Popen('exec ' + cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
 
 # check validity of existing index file
-def chk_idxfile():
-    global thinfo
+def chk_idxfile(thinfo):
     try:
         with open(cfg['idxfile'], 'r') as idxfile:
             idx = json.load(idxfile)
@@ -673,53 +687,40 @@ def chk_idxfile():
                     return False
                 if idx['customvf'] != thinfo['customvf']:
                     return False
-            thinfo = idx
-            return True
+            return idx
     except Exception as e:
         pass
     return False
 
-
-############################################################
-# prepare thumbnails
-
 # initialize thumbnail info structure
-thinfo = {
-    'name': os.path.basename(cfg['vid']),
-    'frames': -1,
-    'duration': -1,
-    'fps': -1,
-    'start': cfg['start'],
-    'end': cfg['end'],
-    'count': 0,
-    'width': cfg['thumb_width'],
-    'method': cfg['method'],
-    'frame_skip': cfg['frame_skip'],
-    'time_skip': cfg['time_skip'],
-    'scene_thresh': cfg['scene_thresh'],
-    'customvf': cfg['customvf'],
-    'date': 0,
-    'th': []
-}
+def get_thinfo():
+    thinfo = {
+        'name': os.path.basename(cfg['vid']),
+        'frames': -1,
+        'duration': -1,
+        'fps': -1,
+        'start': cfg['start'],
+        'end': cfg['end'],
+        'count': 0,
+        'width': cfg['thumb_width'],
+        'method': cfg['method'],
+        'frame_skip': cfg['frame_skip'],
+        'time_skip': cfg['time_skip'],
+        'scene_thresh': cfg['scene_thresh'],
+        'customvf': cfg['customvf'],
+        'date': 0,
+        'th': []
+    }
+    thinfo.update(get_meta(cfg['vid']))
+    thinfo['date'] = int(time.time())
+    if not cfg['force']:
+        chk = chk_idxfile(thinfo)
+        if chk:
+            return chk, True
+    return thinfo, False
 
-# prepare thumbnail directory
-cfg['thdir'] = cfg['tmpdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'])
-try:
-    os.makedirs(cfg['thdir'], exist_ok=True)
-except Exception as e:
-    eprint(0, str(e))
-    exit(1)
-cfg['idxfile'] = cfg['thdir'] + '/ffpreview.idx'
-
-# rebuild thumbnails and index, if necessary
-statdsp[0].setText('Analysing ...'),
-QApplication.processEvents()
-thinfo.update(get_meta(cfg['vid']))
-thinfo['date'] = int(time.time())
-if verbosity > 3:
-    eprint(4, 'cfg = ' + json.dumps(cfg, indent=2))
-    eprint(4, 'thinfo = ' + json.dumps(thinfo, indent=2))
-if cfg['force'] or not chk_idxfile():
+# clear out thumbnail directory
+def clear_thumbdir():
     try:
         os.unlink(cfg['idxfile'])
     except Exception as e:
@@ -730,64 +731,93 @@ if cfg['force'] or not chk_idxfile():
                 os.unlink(cfg['thdir'] + '/' + f)
             except Exception as e:
                 pass
-    statdsp[0].setText('Processing video:'),
-    make_thumbs(cfg['vid'], thinfo, statdsp[1], progbar)
 
-
-############################################################
 # generate clickable thumbnail labels
-
-try:
-    with open(cfg['idxfile'], 'r') as idxfile:
-        idx = json.load(idxfile)
-        if verbosity > 3:
-            eprint(4, 'idx = ' + json.dumps(idx, indent=2))
-        tlabels = []
-        statdsp[0].setText('Loading:')
-        progbar.show()
-        for th in idx['th']:
-            if th[0] % 100 == 0:
-                statdsp[1].setText('%d / %d' % (th[0], idx['count']))
-                progbar.setValue(th[0] * 100 / idx['count'])
-                QApplication.processEvents()
-            try:
+def make_tlabels(ilabel, pbar):
+    tlabels = []
+    try:
+        with open(cfg['idxfile'], 'r') as idxfile:
+            idx = json.load(idxfile)
+            if verbosity > 3:
+                eprint(4, 'idx = ' + json.dumps(idx, indent=2))
+            for th in idx['th']:
+                if th[0] % 100 == 0:
+                    ilabel.setText('%d / %d' % (th[0], idx['count']))
+                    pbar.setValue(th[0] * 100 / idx['count'])
+                    QApplication.processEvents()
                 thumb = QPixmap(cfg['thdir'] + '/' + th[1])
-            except:
-                thumb = broken_img
-            tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]), info=th)
-            tlabels.append(tlabel)
-except Exception as e:
-    eprint(0, str(e))
-
-if len(tlabels) == 0: # no thumbnails available :(
-    th = [0, 'broken', str(cfg['start'])]
-    tlabel = tLabel(pixmap=broken_img, text=s2hms(str(cfg['start'])), info=th)
-    tlabels.append(tlabel)
-
-tlwidth = tlabel.width()
-tlheight = tlabel.height()
+                if thumb.isNull():
+                    thumb = broken_img.scaledToWidth(cfg['thumb_width'])
+                tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]), info=th)
+                tlabels.append(tlabel)
+    except Exception as e:
+        eprint(0, str(e))
+    if len(tlabels) == 0:
+        print('huhu')
+        # no thumbnails available, make dummy
+        th = [0, 'broken', str(cfg['start'])]
+        thumb = broken_img.scaledToWidth(cfg['thumb_width'])
+        tlabel = tLabel(pixmap=thumb, text=s2hms(str(cfg['start'])), info=th)
+        tlabels.append(tlabel)
+    return tlabels
 
 
 ############################################################
-# fix window geometry, start main loop
+# main function
+def main():
+    global tlabels, tlwidth, tlheight
 
-scwidth = qApp.style().pixelMetric(QStyle.PM_ScrollBarExtent) * 2
-root.resize(tlwidth*cfg['grid_columns']+scwidth, (tlheight + 6)*cfg['grid_rows']+22)
-root.setMinimumSize(tlwidth+scwidth, tlheight+scwidth)
+    root.show()
 
-progbar.hide()
-statdsp[0].setText(' Generating view ...')
-statdsp[1].setText('')
-statdsp[2].setText('')
-QApplication.processEvents()
+    # analyze video and prepare info and thumbnail files
+    statdsp[0].setText('Analyzing ...')
+    QApplication.processEvents()
+    thinfo, ok = get_thinfo()
+    if not ok:
+        # (re)generate thumbnails and index file
+        statdsp[0].setText('Processing video:')
+        clear_thumbdir()
+        thinfo = make_thumbs(cfg['vid'], thinfo, statdsp[1], progbar)
 
-fill_grid(cfg['grid_columns'])
-statdsp[0].setText(' Duration: ' + str(thinfo["duration"]) + ' s')
-statdsp[1].setText(' Thumbs: ' + str(thinfo["count"]))
-statdsp[2].setText(' Method: ' + str(thinfo["method"]))
-QApplication.processEvents()
+    # load thumbnails and make labels
+    statdsp[0].setText('Loading:')
+    progbar.show()
+    tlabels = make_tlabels(statdsp[1], progbar)
+    tlwidth = tlabels[0].width() + 6
+    tlheight = tlabels[0].height() + 6
 
-exit(app.exec_())
+    # roughly fix window geometry
+    w = tlwidth * cfg['grid_columns'] + root.px
+    h = tlheight * cfg['grid_rows'] + root.py
+    root.resize(w, h)
 
+    # fill the view grid
+    progbar.hide()
+    statdsp[0].setText(' Generating view ...')
+    statdsp[1].setText('')
+    statdsp[2].setText('')
+    QApplication.processEvents()
+    fill_grid(cfg['grid_columns'])
+    QApplication.processEvents()
+
+    # final window fixes
+    statdsp[0].setText(' Duration: ' + str(thinfo["duration"]) + ' s')
+    statdsp[1].setText(' Thumbs: ' + str(thinfo["count"]))
+    statdsp[2].setText(' Method: ' + str(thinfo["method"]))
+    QApplication.processEvents()
+    root.calculate_props(scroll)
+    root.setMinimumSize(tlwidth + root.px, tlheight + root.py)
+    root.optimize_extent()
+
+    if verbosity > 3:
+        eprint(4, 'cfg = ' + json.dumps(cfg, indent=2))
+        eprint(4, 'thinfo = ' + json.dumps(thinfo, indent=2))
+
+    # start main loop
+    exit(app.exec_())
+
+# run application
+if __name__== "__main__":
+    main()
 
 # EOF

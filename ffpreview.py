@@ -40,9 +40,8 @@ FFPREVIEW_VERSION = '0.2+'
 
 import sys
 
-if sys.version_info.major < 3 or sys.version_info.minor < 5:
-    print('Need Python version 3.5+ or later, got version ' + str(sys.version), file=sys.stderr)
-    exit(0)
+if sys.version_info.major < 3:
+    raise Exception ('Need Python version 3 or later, got version ' + str(sys.version))
 
 import io
 import os
@@ -61,15 +60,11 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from inspect import currentframe
 
-os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
-
 ############################################################
 # utility functions
 
-verbosity = 0
-
 def eprint(lvl=0, *args, **kwargs):
-    if lvl <= verbosity:
+    if lvl <= cfg['verbosity']:
         print('LINE %d: ' % currentframe().f_back.f_lineno, file=sys.stderr, end = '')
         print(*args, file=sys.stderr, **kwargs)
 
@@ -104,212 +99,201 @@ def str2float(s):
         return float(s)
     return 0.0
 
-
-############################################################
-# low-level initialization
-
-proc = None
-
-def die(event=None):
+def die(rc):
     global proc
     if proc is not None:
-        eprint(2, 'killing subprocess: %s' % proc.args)
+        eprint(1, 'killing subprocess: %s' % proc.args)
         proc.terminate()
         try:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
-    exit()
+    exit(rc)
 
-def sigint_handler(signum, frame):
-    eprint(2, 'ffpreview caught signal %d, exiting.' % signum)
-    die()
-
-signal.signal(signal.SIGHUP, sigint_handler)
-signal.signal(signal.SIGINT, sigint_handler)
-signal.signal(signal.SIGQUIT, sigint_handler)
-signal.signal(signal.SIGTERM, sigint_handler)
-signal.signal(signal.SIGPIPE, signal.SIG_IGN)
-
+def sig_handler(signum, frame):
+    eprint(0, 'ffpreview caught signal %d, exiting.' % signum)
+    die(signum)
 
 ############################################################
 # configuration
 
-cfg = {}
+def configure():
+    # set defaults
+    cfg = {
+        'home': expanduser("~"),
+        'conffile': 'ffpreview.conf',
+        'vid': '',
+        'tmpdir': '',
+        'thdir': '',
+        'idxfile': '',
+        'grid': '5x5',
+        'grid_columns': 5,
+        'grid_rows': 5,
+        'thumb_width': '128',
+        'highlightcolor': 'lightblue',
+        'ffprobe': 'ffprobe',
+        'ffmpeg': 'ffmpeg',
+        'player': 'mpv --no-ordered-chapters --start=%t %f',
+        'plpaused': 'mpv --no-ordered-chapters --start=%t --pause %f',
+        'force': 'False',
+        'reuse': 'False',
+        'method': 'iframe',
+        'frame_skip': '-1',
+        'time_skip': '-1',
+        'scene_thresh': '-1',
+        'customvf': '',
+        'start': '0',
+        'end': '0',
+        'verbosity': 0,
+    }
 
-# set defaults
-cfg['home'] = expanduser("~")
-cfg['conffile'] = 'ffpreview.conf'
-cfg['vid'] = ''
-cfg['tmpdir'] = ''
-cfg['thdir'] = ''
-cfg['idxfile'] = ''
-cfg['grid'] = '5x5'
-cfg['grid_columns'] = 5
-cfg['grid_rows'] = 5
-cfg['thumb_width'] = '128'
-cfg['highlightcolor'] = 'lightblue'
-cfg['ffprobe'] = 'ffprobe'
-cfg['ffmpeg'] = 'ffmpeg'
-cfg['player'] = 'mpv --no-ordered-chapters --start=%t %f'
-cfg['plpaused'] = 'mpv --no-ordered-chapters --start=%t --pause %f'
-cfg['force'] = 'False'
-cfg['reuse'] = 'False'
-cfg['method'] = 'iframe'
-cfg['frame_skip'] = '-1'
-cfg['time_skip'] = '-1'
-cfg['scene_thresh'] = '-1'
-cfg['customvf'] = ''
-cfg['start'] = '0'
-cfg['end'] = '0'
+    # parse command line arguments
+    parser = argparse.ArgumentParser(
+        description='Generate clickable video thumbnail preview.',
+        epilog='The -C, -i, -N, -n and -s options are mutually exclusive, -C beats -i beats -N beats -n beats -s.'
+    )
+    parser.add_argument('filename', help='input video file')
+    parser.add_argument('-c', '--config', metavar='FILE', help='read configuration from FILE')
+    parser.add_argument('-g', '--grid', metavar='C[xR]', help='number of columns and rows in preview')
+    parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
+    parser.add_argument('-t', '--tmpdir', metavar='path', help='path to thumbnail top level directory')
+    parser.add_argument('-f', '--force', action='count', help='force thumbnail and index rebuild')
+    parser.add_argument('-r', '--reuse', action='count', help='reuse filter settings from index file')
+    parser.add_argument('-i', '--iframe', action='count', help='select only I-frames (default)')
+    parser.add_argument('-n', '--nskip', type=int, metavar='N', help='select only every Nth frame')
+    parser.add_argument('-N', '--nsecs', type=float, metavar='F', help='select one frame every F seconds')
+    parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold; 0 < F < 1')
+    parser.add_argument('-C', '--customvf', metavar='S', help='select by custom filter string S')
+    parser.add_argument('-S', '--start', metavar='TS', help='start video analysis at time TS')
+    parser.add_argument('-E', '--end', metavar='TS', help='end video analysis at time TS')
+    parser.add_argument('-v', '--verbose', action='count', help='be more verbose; repeat to increase')
+    parser.add_argument('--version', action='count', help='print version info and exit')
+    args = parser.parse_args()
 
-# parse command line arguments
-parser = argparse.ArgumentParser(
-    description='Generate clickable video thumbnail preview.',
-    epilog='The -C, -i, -N, -n and -s options are mutually exclusive, -C beats -i beats -N beats -n beats -s.'
-)
-parser.add_argument('filename', help='input video file')
-parser.add_argument('-c', '--config', metavar='FILE', help='read configuration from FILE')
-parser.add_argument('-g', '--grid', metavar='C[xR]', help='number of columns and rows in preview')
-parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
-parser.add_argument('-t', '--tmpdir', metavar='path', help='path to thumbnail top level directory')
-parser.add_argument('-f', '--force', action='count', help='force thumbnail and index rebuild')
-parser.add_argument('-r', '--reuse', action='count', help='reuse filter settings from index file')
-parser.add_argument('-i', '--iframe', action='count', help='select only I-frames (default)')
-parser.add_argument('-n', '--nskip', type=int, metavar='N', help='select only every Nth frame')
-parser.add_argument('-N', '--nsecs', type=float, metavar='F', help='select one frame every F seconds')
-parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold; 0 < F < 1')
-parser.add_argument('-C', '--customvf', metavar='S', help='select by custom filter string S')
-parser.add_argument('-S', '--start', metavar='TS', help='start video analysis at time TS')
-parser.add_argument('-E', '--end', metavar='TS', help='end video analysis at time TS')
-parser.add_argument('-v', '--verbose', action='count', help='be more verbose; repeat to increase')
-parser.add_argument('--version', action='count', help='print version info and exit')
-args = parser.parse_args()
+    if args.version:
+        print('ffpreview version ' + FFPREVIEW_VERSION)
+        exit(0)
 
-if args.version:
-    print('ffpreview version ' + FFPREVIEW_VERSION)
-    exit(0)
+    # parse config file
+    defconfpath = os.path.join( # try to determine user config file
+        os.environ.get('APPDATA') or
+        os.environ.get('XDG_CONFIG_HOME') or
+        os.path.join(os.environ['HOME'], '.config'),
+        cfg['conffile']
+    )
+    if args.config:
+        cfg['conffile'] = args.config
+    cfgfiles = [defconfpath, cfg['conffile']]
+    fconf = ConfigParser(allow_no_value=True, defaults=cfg)
+    cf = fconf.read(cfgfiles)
+    try:
+        options = fconf.options('Default')
+        for option in options:
+            try:
+                cfg[option] = fconf.get('Default', option)
+            except Exception as e:
+                eprint(0, str(e))
+    except Exception as e:
+        eprint(0, str(e))
 
-# parse config file
-defconfpath = os.path.join( # try to determine user config file
-    os.environ.get('APPDATA') or
-    os.environ.get('XDG_CONFIG_HOME') or
-    os.path.join(os.environ['HOME'], '.config'),
-    cfg['conffile']
-)
-if args.config:
-    cfg['conffile'] = args.config
-cfgfiles = [defconfpath, cfg['conffile']]
-fconf = ConfigParser(allow_no_value=True, defaults=cfg)
-cf = fconf.read(cfgfiles)
-try:
-    options = fconf.options('Default')
-    for option in options:
-        try:
-            cfg[option] = fconf.get('Default', option)
-        except Exception as e:
-            eprint(1, str(e))
-except Exception as e:
-    eprint(1, str(e))
+    # fix up types of non-string options
+    cfg['force'] = str2bool(cfg['force'])
+    cfg['reuse'] = str2bool(cfg['reuse'])
+    cfg['thumb_width'] = str2int(cfg['thumb_width'])
+    cfg['frame_skip'] = str2int(cfg['frame_skip'])
+    cfg['time_skip'] = str2float(cfg['time_skip'])
+    cfg['scene_thresh'] = str2float(cfg['scene_thresh'])
+    cfg['start'] = str2float(cfg['start'])
+    cfg['end'] = str2float(cfg['end'])
 
-# fix non-string typed options
-cfg['force'] = str2bool(cfg['force'])
-cfg['reuse'] = str2bool(cfg['reuse'])
-cfg['thumb_width'] = str2int(cfg['thumb_width'])
-cfg['frame_skip'] = str2int(cfg['frame_skip'])
-cfg['time_skip'] = str2float(cfg['time_skip'])
-cfg['scene_thresh'] = str2float(cfg['scene_thresh'])
-cfg['start'] = str2float(cfg['start'])
-cfg['end'] = str2float(cfg['end'])
+    # evaluate remaining command line args
+    cfg['vid'] = args.filename
+    if args.tmpdir:
+        cfg['tmpdir'] = args.tmpdir
+    if args.start:
+        cfg['start'] = hms2s(args.start)
+    if args.end:
+        cfg['end'] = hms2s(args.end)
+    if args.grid:
+        cfg['grid'] = args.grid
+    if args.width:
+        cfg['thumb_width'] = args.width
+    if args.force:
+        cfg['force'] = True
+    if args.reuse:
+        cfg['reuse'] = True
+    if args.scene:
+        cfg['method'] = 'scene'
+        cfg['scene_thresh'] = args.scene
+    if args.nskip:
+        cfg['method'] = 'skip'
+        cfg['frame_skip'] = args.nskip
+    if args.nsecs:
+        cfg['method'] = 'time'
+        cfg['time_skip'] = args.nsecs
+    if args.iframe:
+        cfg['method'] = 'iframe'
+    if args.customvf:
+        cfg['method'] = 'customvf'
+        cfg['customvf'] = args.customvf
+    if args.verbose:
+        cfg['verbosity'] = args.verbose
 
-# evaluate remaining command line args
-cfg['vid'] = args.filename
-if args.tmpdir:
-    cfg['tmpdir'] = args.tmpdir
-if args.start:
-    cfg['start'] = hms2s(args.start)
-if args.end:
-    cfg['end'] = hms2s(args.end)
-if args.grid:
-    cfg['grid'] = args.grid
-if args.width:
-    cfg['thumb_width'] = args.width
-if args.force:
-    cfg['force'] = True
-if args.reuse:
-    cfg['reuse'] = True
-if args.scene:
-    cfg['method'] = 'scene'
-    cfg['scene_thresh'] = args.scene
-if args.nskip:
-    cfg['method'] = 'skip'
-    cfg['frame_skip'] = args.nskip
-if args.nsecs:
-    cfg['method'] = 'time'
-    cfg['time_skip'] = args.nsecs
-if args.iframe:
-    cfg['method'] = 'iframe'
-if args.customvf:
-    cfg['method'] = 'customvf'
-    cfg['customvf'] = args.customvf
-if args.verbose:
-    verbosity = args.verbose
+    # clear unused method parameters
+    if cfg['method'] == 'scene':
+        cfg['time_skip'] = None
+        cfg['frame_skip'] = None
+        cfg['customvf'] = None
+    elif cfg['method'] == 'skip':
+        cfg['scene_thresh'] = None
+        cfg['time_skip'] = None
+        cfg['customvf'] = None
+    elif cfg['method'] == 'time':
+        cfg['scene_thresh'] = None
+        cfg['frame_skip'] = None
+        cfg['customvf'] = None
+    elif cfg['method'] == 'customvf':
+        cfg['scene_thresh'] = None
+        cfg['time_skip'] = None
+        cfg['frame_skip'] = None
+    elif cfg['method'] == 'iframe':
+        cfg['scene_thresh'] = None
+        cfg['time_skip'] = None
+        cfg['frame_skip'] = None
+        cfg['customvf'] = None
 
-# clear unused method parameters
-if cfg['method'] == 'scene':
-    cfg['time_skip'] = None
-    cfg['frame_skip'] = None
-    cfg['customvf'] = None
-elif cfg['method'] == 'skip':
-    cfg['scene_thresh'] = None
-    cfg['time_skip'] = None
-    cfg['customvf'] = None
-elif cfg['method'] == 'time':
-    cfg['scene_thresh'] = None
-    cfg['frame_skip'] = None
-    cfg['customvf'] = None
-elif cfg['method'] == 'customvf':
-    cfg['scene_thresh'] = None
-    cfg['time_skip'] = None
-    cfg['frame_skip'] = None
-elif cfg['method'] == 'iframe':
-    cfg['scene_thresh'] = None
-    cfg['time_skip'] = None
-    cfg['frame_skip'] = None
-    cfg['customvf'] = None
+    # parse grid geometry
+    grid = re.split('[xX,;:]', cfg['grid'])
+    cfg['grid_columns'] = int(grid[0])
+    if len(grid) > 1:
+        cfg['grid_rows'] = int(grid[1])
 
-# prepare temp directory
-if not cfg['tmpdir']:
-    cfg['tmpdir'] = tempfile.gettempdir()
-try:
-    os.makedirs(cfg['tmpdir'], exist_ok=True)
-except Exception as e:
-    eprint(0, str(e))
-    exit(1)
+    # prepare temp directory
+    if not cfg['tmpdir']:
+        cfg['tmpdir'] = tempfile.gettempdir()
+    try:
+        os.makedirs(cfg['tmpdir'], exist_ok=True)
+    except Exception as e:
+        eprint(0, str(e))
+        exit(1)
 
-# prepare thumbnail directory
-cfg['thdir'] = cfg['tmpdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'])
-try:
-    os.makedirs(cfg['thdir'], exist_ok=True)
-except Exception as e:
-    eprint(0, str(e))
-    exit(1)
-cfg['idxfile'] = cfg['thdir'] + '/ffpreview.idx'
+    # prepare thumbnail directory
+    cfg['thdir'] = cfg['tmpdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'])
+    try:
+        os.makedirs(cfg['thdir'], exist_ok=True)
+    except Exception as e:
+        eprint(0, str(e))
+        exit(1)
+    cfg['idxfile'] = cfg['thdir'] + '/ffpreview.idx'
 
-# parse grid geometry
-grid = re.split('[xX,;:]', cfg['grid'])
-cfg['grid_columns'] = int(grid[0])
-if len(grid) > 1:
-    cfg['grid_rows'] = int(grid[1])
+    return cfg
+    # end of configure()
 
-# end of configuration
+
 ############################################################
+# Qt classes
 
-
-############################################################
-# initialize window
-
-ffpreview_png = '''
+_ffpreview_png = '''
 iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACfXpUWHRSYXcgcHJvZmlsZSB0eXBlIGV4aWYAAHja7ZZbjtUwDIbfuwqWEN9iZzlpLhI7YPn8
 aXt6YBgxg+AF6cRqXaWO7fhzqm7j29e5fcEgj7SpeeSSc8LQooUrHiI9x7j0OUdJj/tj0HWn7d0XDC3Qck66Xm/lmn/Y51vD0TsvyN4skDsM/xjY6zXPiX/K
 yOWO8dzOdc3ZY85x7q5qRhnyuakzxPZwA8MdVZJjWYY4LsOzH1IgkWpqpKmnlnZIo0JMkiYp9Y0qTRrUoRs15Kg82KGZG8sxF+JcuEkSEl1Ck12KdAlhaTxE
@@ -327,9 +311,9 @@ l8zKrIFxXFuj01aGrfJLlLqSSONn4cB41jSTjH90UmzOwpU7hZNz6UBjpsmmOZbzDpx34H/jwPS/ldO5
 //VjVMcHerAGh3AfjuVpfQPL4sjxDpv35t0fw8O5gvtCYC8LT5go+UDlwCv4KxMnQ0j21BCSNSEknSJxIoRkbw0hWRsWdRohaT2Cq/FACyVbna8qKdm9uKHQ
 mRf6NVRgi7AOlxRYab+ND1Sk8dOEWzaqSOmTwZ4vSGnVP4xgNOsvzQYH8GEoeHeN/TY+sCyG12NVsOVJxm0FtiKUbSRRaIbrrcPBNC4Li15gCS7uYP+0MjyS
 8lmRcYUNxWiJXYcrMp5OAq9KuI8kcXvjwKkkbZ19ra3ZDuwv+H5/yOloTWu2q2gwqtZsS3FhPYWva1qz/WVrVjanB+egOR3txsZ8Ye8sO3ACz/4N3Wzp2esU
-Ut0AAAAASUVORK5CYII=
-'''
-broken_img_png = '''
+Ut0AAAAASUVORK5CYII='''
+
+_broken_img_png = '''
 iVBORw0KGgoAAAANSUhEUgAAAIAAAABJCAYAAAD12S63AAAEi0lEQVR42u1dTUhVQRT+1LIfSehHyoKCwhSsFombKIiwIEm0IiiICApzIRYlRbaxXGTtWrSQ
 apG0chMkZGFSC6NFQiFJEbTyr4gkRDT02WvhEx9yu2/mzs89c+/5YBY+Z+aen2/OPWfuffMABoPBYDAYDEbskMUm0I4VABrS/r7DJokWcgGcANABICnRWtl0
 7mA/gOeSDhZtfAsgjGTc7J4dQSfWAugmvvqSvNaCowpAu6HwqxLa2wCUScy5i125gNWpJOmbofuuKgE6AFQE1K3CZ94LcXJwLYBeww5WJcARQ/p/8ZEpL0ql
@@ -343,8 +327,7 @@ InjmyOqfx/YMOpdzFJAjwJBjBAAyn1/ABJCsAFzEfQokeIFgz75tkUAEvXAXfrr/jVMU+ATgDAi+TmUY
 i+R7CFFgKftdyoaRygUYC2imYjcRAR5oIEGcsRFq30kwihbDUeAPr27ldohCFPgRYPwrdrSWlmtakTrFKOBVEdRxGHfroCwRQT4Kji/i1a2lWT16p0pTLsCO
 DvYCTAEFY4gIu4PDuHJrdnVTwrVVTmF1JwBcdMVg1YJKrePV/d82AKA0yluTFKIABUdPAzgbxdq2TNAApx0gqe6zA0sRE1CPAjYc3gtgPWKKTRYIcE9hPp2O
 HsfcSymMAEYWfad9L8TO9LVBgE6iSWykbgOdhrc8ZR3OcCTZUpFrBHPnDzMcJcCwpFztAJbH0Sk2jybPh73zb2VCNf92YgSjwG42dTxJMAICZ+sy/PFZo8Pb
-Ec1fP40FEpDbSStlk0UTXj/D3sRmYTAYDAbDKP4Bb2zlnKfZbGYAAAAASUVORK5CYII=
-'''
+Ec1fP40FEpDbSStlk0UTXj/D3sRmYTAYDAbDKP4Bb2zlnKfZbGYAAAAASUVORK5CYII='''
 
 class sQPixmap(QPixmap):
     def __init__(self, *args, imgdata=None, **kwargs):
@@ -384,10 +367,10 @@ class tLabel(QWidget):
         self.setStyleSheet('::hover {background-color: ' + cfg['highlightcolor'] + ';}')
 
     def enterEvent(self, event):
-        statdsp[3].setText(self.info[1])
+        self.window().statdsp[3].setText(self.info[1])
 
     def leaveEvent(self, event):
-        statdsp[3].setText('')
+        self.window().statdsp[3].setText('')
 
     def mouseReleaseEvent(self, event):
         button = event.button()
@@ -397,91 +380,28 @@ class tLabel(QWidget):
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)
-        menu.addAction('Play from here',
+        menu.addAction('Play From Here',
                     lambda: play_video(cfg['vid'], self.info[2]))
-        menu.addAction('Play from start',
+        menu.addAction('Play From Start',
                     lambda: play_video(cfg['vid']))
         menu.addSeparator()
-        menu.addAction('Copy timestamp [H:M:S.ms]',
-                    lambda: clipboard.setText(s2hms(self.info[2])))
-        menu.addAction('Copy timestamp [S.ms]',
-                    lambda: clipboard.setText(self.info[2]))
+        menu.addAction('Copy Timestamp [H:M:S.ms]',
+                    lambda: self.window().clipboard.setText(s2hms(self.info[2])))
+        menu.addAction('Copy Timestamp [S.ms]',
+                    lambda: self.window().clipboard.setText(self.info[2]))
         menu.addSeparator()
-        menu.addAction('Copy original filename',
-                    lambda: clipboard.setText(cfg['vid']))
-        menu.addAction('Copy thumb filename',
-                    lambda: clipboard.setText(cfg['thdir'] + '/' + self.info[1]))
-        menu.addAction('Copy thumbnail image',
-                    lambda: clipboard.setPixmap(self.layout.itemAt(0).widget().pixmap()))
+        menu.addAction('Copy Original Filename',
+                    lambda: self.window().clipboard.setText(cfg['vid']))
+        menu.addAction('Copy Thumb Filename',
+                    lambda: self.window().clipboard.setText(cfg['thdir'] + '/' + self.info[1]))
+        menu.addAction('Copy Thumbnail Image',
+                    lambda: self.window().clipboard.setPixmap(self.layout.itemAt(0).widget().pixmap()))
         menu.addSeparator()
-        menu.addAction('Optimize window extent', lambda: self.window().optimize_extent())
+        menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
         menu.addSeparator()
-        menu.addAction('Quit', lambda: die())
+        menu.addAction('Quit', lambda: die(0))
         menu.exec_(self.mapToGlobal(event.pos()))
 
-
-class sMainWindow(QMainWindow):
-    px = 50
-    py = 50
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def closeEvent(self, event):
-        self.close()
-        die()
-
-    def calculate_props(self, ref):
-        self.px = self.width() - ref.viewport().width()
-        self.py = self.height() - ref.viewport().height()
-
-    def optimize_extent(self):
-        w = tlwidth * cfg['grid_columns'] + self.px
-        h = tlheight * cfg['grid_rows'] + self.py
-        self.resize(w, h)
-
-app = QApplication(sys.argv)
-app.setApplicationName('ffpreview')
-clipboard = QApplication.clipboard()
-broken_img = sQPixmap(imgdata=broken_img_png)
-ffpreview_ico = sQIcon(imgdata=ffpreview_png)
-root = sMainWindow()
-root.setWindowTitle('ffpreview - ' + cfg['vid'])
-root.resize(500, 300)
-root.setWindowIcon(ffpreview_ico)
-QShortcut('Esc', root).activated.connect(die)
-QShortcut('Ctrl+Q', root).activated.connect(die)
-QShortcut('Ctrl+W', root).activated.connect(die)
-QShortcut('Ctrl+G', root).activated.connect(root.optimize_extent)
-
-statbar = QHBoxLayout()
-statdsp = []
-for i in range(4):
-    s = QLabel('')
-    s.resize(100, 20)
-    statdsp.append(s)
-    statbar.addWidget(s)
-progbar = QProgressBar()
-progbar.resize(100, 20)
-progbar.hide()
-statbar.addWidget(progbar)
-
-thumb_layout = QGridLayout()
-thumb_layout.setContentsMargins(0, 0, 0, 0)
-thumb_layout.setHorizontalSpacing(0)
-thumb_layout.setHorizontalSpacing(0)
-tlwidth = tlheight = 0
-tlabels = []
-
-def fill_grid(cols):
-    thumb_layout.parent().setUpdatesEnabled(False)
-    x = 0; y = 0
-    for tl in tlabels:
-        thumb_layout.removeWidget(tl)
-        thumb_layout.addWidget(tl, y, x)
-        x += 1
-        if x >= cols:
-            x = 0; y += 1
-    thumb_layout.parent().setUpdatesEnabled(True)
 
 class tScrollArea(QScrollArea):
     def __init__(self, *args, imgdata=None, **kwargs):
@@ -496,10 +416,12 @@ class tScrollArea(QScrollArea):
 
     def _delayedUpdate(self):
         self._resizeTimer.stop()
+        tlwidth = self.window().tlwidth
+        tlheight = self.window().tlheight
         if tlwidth < 1 or tlheight < 1:
             return
         rows = int(self.viewport().height() / tlheight + 0.5)
-        self.verticalScrollBar().setPageStep((rows - 1) * tlheight)
+        self.verticalScrollBar().setPageStep((rows-1 if rows>1 else rows) * tlheight)
         self.verticalScrollBar().setSingleStep(tlheight)
         cfg['grid_rows'] = rows
         cols = int((self.viewport().width()) / tlwidth)
@@ -507,33 +429,99 @@ class tScrollArea(QScrollArea):
             cols = 1
         if cols != cfg['grid_columns']:
             cfg['grid_columns'] = cols
-            fill_grid(cols)
+            self.window().fill_grid()
 
-main_frame = QWidget()
-main_layout = QVBoxLayout(main_frame)
-main_layout.setContentsMargins(0, 4, 0, 0)
+    def do_scroll(self, event):
+        if event == 'Home':
+            self.verticalScrollBar().setValue(self.verticalScrollBar().minimum());
+        elif event == 'End':
+            self.verticalScrollBar().setValue(self.verticalScrollBar().maximum());
 
-scrollframe = QFrame()
-scrollframe.setLayout(thumb_layout)
-scroll = tScrollArea()
-scroll.setStyleSheet('QFrame {border: none;}')
-scroll.setWidget(scrollframe)
-scroll.setWidgetResizable(True)
-scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-main_layout.addWidget(scroll)
-main_layout.addLayout(statbar)
-root.setCentralWidget(main_frame)
+class sMainWindow(QMainWindow):
+    _instance = None
+    px = 50
+    py = 50
+    tlwidth = 0
+    tlheight = 0
+    tlabels = []
 
-def do_scroll(event):
-    if event == 'Home':
-        scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().minimum());
-    elif event == 'End':
-        scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum());
+    def __init__(self, *args, title='', **kwargs):
+        if self._instance:
+            raise Exception ('No more than one main window allowed!')
+        super().__init__(*args, **kwargs)
+        _instance = self
+        self.init_window(title)
 
-QShortcut('Home', root).activated.connect(lambda: do_scroll('Home'))
-QShortcut('End', root).activated.connect(lambda: do_scroll('End'))
+    def closeEvent(self, event):
+        self.close()
+        die(0)
+
+    def calculate_props(self):
+        self.px = self.width() - self.scroll.viewport().width()
+        self.py = self.height() - self.scroll.viewport().height()
+
+    def optimize_extent(self):
+        w = self.tlwidth * cfg['grid_columns'] + self.px
+        h = self.tlheight * cfg['grid_rows'] + self.py
+        self.resize(w, h)
+
+    def fill_grid(self):
+        self.scrollframe.setUpdatesEnabled(False)
+        x = 0; y = 0
+        for tl in self.tlabels:
+            self.thumb_layout.removeWidget(tl)
+            self.thumb_layout.addWidget(tl, y, x)
+            x += 1
+            if x >= cfg['grid_columns']:
+                x = 0; y += 1
+        self.scrollframe.setUpdatesEnabled(True)
+
+    def init_window(self, title):
+        self.setWindowTitle(title)
+        self.broken_img = sQPixmap(imgdata=_broken_img_png)
+        self.ffpreview_ico = sQIcon(imgdata=_ffpreview_png)
+        self.setWindowIcon(self.ffpreview_ico)
+        self.clipboard = QApplication.clipboard()
+        self.resize(500, 300)
+
+        self.statbar = QHBoxLayout()
+        self.statdsp = []
+        for i in range(4):
+            s = QLabel('')
+            s.resize(100, 20)
+            self.statdsp.append(s)
+            self.statbar.addWidget(s)
+        self.progbar = QProgressBar()
+        self.progbar.resize(100, 20)
+        self.progbar.hide()
+        self.statbar.addWidget(self.progbar)
+
+        self.scrollframe = QFrame()
+        self.scroll = tScrollArea()
+        self.scroll.setWidget(self.scrollframe)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setStyleSheet('QFrame {border: none;}')
+        self.thumb_layout = QGridLayout(self.scrollframe)
+        self.thumb_layout.setContentsMargins(0, 0, 0, 0)
+        self.thumb_layout.setHorizontalSpacing(0)
+        self.thumb_layout.setHorizontalSpacing(0)
+
+        self.main_frame = QWidget()
+        self.main_layout = QVBoxLayout(self.main_frame)
+        self.main_layout.setContentsMargins(0, 4, 0, 0)
+        self.main_layout.addWidget(self.scroll)
+        self.main_layout.addLayout(self.statbar)
+        self.setCentralWidget(self.main_frame)
+
+        QShortcut('Esc', self).activated.connect(lambda: die(0))
+        QShortcut('Ctrl+Q', self).activated.connect(lambda: die(0))
+        QShortcut('Ctrl+W', self).activated.connect(lambda: die(0))
+        QShortcut('Ctrl+G', self).activated.connect(self.optimize_extent)
+        QShortcut('Home', self).activated.connect(lambda: self.scroll.do_scroll('Home'))
+        QShortcut('End', self).activated.connect(lambda: self.scroll.do_scroll('End'))
 
 
 ############################################################
@@ -541,14 +529,14 @@ QShortcut('End', root).activated.connect(lambda: do_scroll('End'))
 
 # get video meta information
 def get_meta(vidfile):
-    meta = { 'frames': -1, 'duration':-1, 'fps':-1.0 }
     global proc
+    meta = { 'frames': -1, 'duration':-1, 'fps':-1.0 }
     # try ffprobe method
     try:
         cmd = cfg['ffprobe'] + ' -v error -select_streams v:0 -of json -count_packets'
         cmd += ' -show_entries format=duration:stream=nb_read_packets'
         cmd += ' "' + vidfile + '"'
-        eprint(3, cmd)
+        eprint(2, cmd)
         proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
         stdout, stderr = proc.communicate()
         retval = proc.wait()
@@ -562,14 +550,14 @@ def get_meta(vidfile):
             return meta
         else:
             eprint(0, cmd + '\n  returned %d' % retval)
-            eprint(2, stderr.decode())
+            eprint(1, stderr.decode())
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
     # ffprobe didn't cut it, try ffmpeg instead
     try:
         cmd = cfg['ffmpeg'] + ' -nostats -i "' + vidfile + '"'
         cmd += ' -c:v copy -f rawvideo -y /dev/null'
-        eprint(3, cmd)
+        eprint(2, cmd)
         proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
         stdout, stderr = proc.communicate()
         retval = proc.wait()
@@ -585,7 +573,7 @@ def get_meta(vidfile):
                     return meta
         else:
             eprint(0, cmd + '\n  returned %d' % retval)
-            eprint(2, stderr.decode())
+            eprint(1, stderr.decode())
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
     return meta
@@ -613,11 +601,11 @@ def make_thumbs(vidfile, thinfo, ilabel, pbar):
         cmd += ' -vf "select=eq(pict_type\,I)'
     cmd += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1"'
     cmd += ' -vsync vfr "' + cfg['thdir'] + '/' + pictemplate + '"'
-    eprint(3, cmd)
+    eprint(2, cmd)
     ebuf = ''
     cnt = 0
     try:
-        progbar.show()
+        pbar.show()
         proc = Popen('exec ' + cmd, shell=True, stderr=PIPE)
         while proc.poll() is None:
             line = proc.stderr.readline()
@@ -638,15 +626,15 @@ def make_thumbs(vidfile, thinfo, ilabel, pbar):
         proc = None
         if retval != 0:
             eprint(0, cmd + '\n  returned %d' % retval)
-            eprint(2, ebuf)
-            exit(retval)
+            eprint(1, ebuf)
+            die(retval)
         thinfo['count'] = cnt
         with open(cfg['idxfile'], 'w') as idxfile:
             json.dump(thinfo, idxfile, indent=2)
         return thinfo
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
-        exit(1)
+        die(2)
 
 # open video in player
 def play_video(filename, start='0', paused=False):
@@ -656,7 +644,7 @@ def play_video(filename, start='0', paused=False):
         cmd = cfg['player']
     cmd = cmd.replace('%t', '"' + start + '"')
     cmd = cmd.replace('%f', '"' + filename + '"')
-    eprint(3, cmd)
+    eprint(2, cmd)
     Popen('exec ' + cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
 
 # check validity of existing index file
@@ -733,13 +721,12 @@ def clear_thumbdir():
                 pass
 
 # generate clickable thumbnail labels
-def make_tlabels(ilabel, pbar):
-    tlabels = []
+def make_tlabels(tlabels, ilabel, pbar, dummy_img):
     try:
         with open(cfg['idxfile'], 'r') as idxfile:
             idx = json.load(idxfile)
-            if verbosity > 3:
-                eprint(4, 'idx = ' + json.dumps(idx, indent=2))
+            if cfg['verbosity'] > 3:
+                eprint(3, 'idx = ' + json.dumps(idx, indent=2))
             for th in idx['th']:
                 if th[0] % 100 == 0:
                     ilabel.setText('%d / %d' % (th[0], idx['count']))
@@ -747,7 +734,7 @@ def make_tlabels(ilabel, pbar):
                     QApplication.processEvents()
                 thumb = QPixmap(cfg['thdir'] + '/' + th[1])
                 if thumb.isNull():
-                    thumb = broken_img.scaledToWidth(cfg['thumb_width'])
+                    thumb = dummy_img.scaledToWidth(cfg['thumb_width'])
                 tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]), info=th)
                 tlabels.append(tlabel)
     except Exception as e:
@@ -756,7 +743,7 @@ def make_tlabels(ilabel, pbar):
         print('huhu')
         # no thumbnails available, make dummy
         th = [0, 'broken', str(cfg['start'])]
-        thumb = broken_img.scaledToWidth(cfg['thumb_width'])
+        thumb = dummy_img.scaledToWidth(cfg['thumb_width'])
         tlabel = tLabel(pixmap=thumb, text=s2hms(str(cfg['start'])), info=th)
         tlabels.append(tlabel)
     return tlabels
@@ -764,54 +751,65 @@ def make_tlabels(ilabel, pbar):
 
 ############################################################
 # main function
-def main():
-    global tlabels, tlwidth, tlheight
 
+def main():
+    # initialization
+    global proc, cfg
+    proc = None
+    cfg = configure()
+    eprint(3, 'cfg = ' + json.dumps(cfg, indent=2))
+
+    signal.signal(signal.SIGHUP, sig_handler)
+    signal.signal(signal.SIGINT, sig_handler)
+    signal.signal(signal.SIGQUIT, sig_handler)
+    signal.signal(signal.SIGTERM, sig_handler)
+    signal.signal(signal.SIGPIPE, signal.SIG_IGN)
+
+    os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
+    app = QApplication(sys.argv)
+    app.setApplicationName('ffpreview')
+    root = sMainWindow(title='ffpreview - '+cfg['vid'])
     root.show()
 
     # analyze video and prepare info and thumbnail files
-    statdsp[0].setText('Analyzing ...')
+    root.statdsp[0].setText('Analyzing ...')
     QApplication.processEvents()
     thinfo, ok = get_thinfo()
     if not ok:
         # (re)generate thumbnails and index file
-        statdsp[0].setText('Processing video:')
+        root.statdsp[0].setText('Processing video:')
         clear_thumbdir()
-        thinfo = make_thumbs(cfg['vid'], thinfo, statdsp[1], progbar)
+        thinfo = make_thumbs(cfg['vid'], thinfo, root.statdsp[1], root.progbar)
 
     # load thumbnails and make labels
-    statdsp[0].setText('Loading:')
-    progbar.show()
-    tlabels = make_tlabels(statdsp[1], progbar)
-    tlwidth = tlabels[0].width() + 6
-    tlheight = tlabels[0].height() + 6
+    root.statdsp[0].setText('Loading:')
+    root.progbar.show()
+    tlabels = make_tlabels(root.tlabels, root.statdsp[1], root.progbar, root.broken_img)
+    root.tlwidth = tlabels[0].width() + 6
+    root.tlheight = tlabels[0].height() + 6
 
     # roughly fix window geometry
-    w = tlwidth * cfg['grid_columns'] + root.px
-    h = tlheight * cfg['grid_rows'] + root.py
+    w = root.tlwidth * cfg['grid_columns'] + root.px
+    h = root.tlheight * cfg['grid_rows'] + root.py
     root.resize(w, h)
 
     # fill the view grid
-    progbar.hide()
-    statdsp[0].setText(' Generating view ...')
-    statdsp[1].setText('')
-    statdsp[2].setText('')
+    root.progbar.hide()
+    root.statdsp[0].setText(' Generating view ...')
+    root.statdsp[1].setText('')
+    root.statdsp[2].setText('')
     QApplication.processEvents()
-    fill_grid(cfg['grid_columns'])
+    root.fill_grid()
     QApplication.processEvents()
 
-    # final window fixes
-    statdsp[0].setText(' Duration: ' + str(thinfo["duration"]) + ' s')
-    statdsp[1].setText(' Thumbs: ' + str(thinfo["count"]))
-    statdsp[2].setText(' Method: ' + str(thinfo["method"]))
+    # final window touch-up
+    root.statdsp[0].setText(' Duration: ' + str(thinfo["duration"]) + ' s')
+    root.statdsp[1].setText(' Thumbs: ' + str(thinfo["count"]))
+    root.statdsp[2].setText(' Method: ' + str(thinfo["method"]))
     QApplication.processEvents()
-    root.calculate_props(scroll)
-    root.setMinimumSize(tlwidth + root.px, tlheight + root.py)
+    root.calculate_props()
+    root.setMinimumSize(root.tlwidth + root.px, root.tlheight + root.py)
     root.optimize_extent()
-
-    if verbosity > 3:
-        eprint(4, 'cfg = ' + json.dumps(cfg, indent=2))
-        eprint(4, 'thinfo = ' + json.dumps(thinfo, indent=2))
 
     # start main loop
     exit(app.exec_())

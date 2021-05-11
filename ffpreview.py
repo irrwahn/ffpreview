@@ -343,41 +343,40 @@ class sQIcon(QIcon):
             super().addPixmap(sQPixmap(imgdata=imgdata))
 
 class tLabel(QWidget):
+    __slots__ = ['info']
     def __init__(self, *args, pixmap=None, text=None, info=None, **kwargs):
         super().__init__(*args, **kwargs)
-        layout = QVBoxLayout()
+        layout = QVBoxLayout(self)
         layout.setSpacing(0)
         layout.setContentsMargins(0,0,0,0)
-        self.setLayout(layout)
-        self.layout = layout
         if pixmap is not None:
             pl = QLabel()
             pl.setPixmap(pixmap)
-            pl.adjustSize()
             pl.setAlignment(Qt.AlignCenter)
             layout.addWidget(pl)
         if text is not None:
             tl = QLabel()
             tl.setText(text)
-            tl.adjustSize()
             tl.setAlignment(Qt.AlignCenter)
             layout.addWidget(tl)
-        if info is not None:
-            self.info = info
+        self.info = info
         self.adjustSize()
-        self.setStyleSheet('::hover {background-color: ' + cfg['highlightcolor'] + ';}')
 
     def enterEvent(self, event):
+        self.setStyleSheet('QLabel {background-color: %s;}' % cfg['highlightcolor'])
         self.window().statdsp[3].setText(self.info[1])
 
     def leaveEvent(self, event):
+        self.setStyleSheet('QLabel {}')
         self.window().statdsp[3].setText('')
 
     def mouseReleaseEvent(self, event):
         button = event.button()
-        #modifiers = event.modifiers()
         if button == Qt.LeftButton:
-            play_video(cfg['vid'], self.info[2], True)
+            if QApplication.keyboardModifiers() == Qt.ShiftModifier:
+                play_video(cfg['vid'], self.info[2])
+            else:
+                play_video(cfg['vid'], self.info[2], True)
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)

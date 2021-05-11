@@ -447,6 +447,7 @@ class tScrollArea(QScrollArea):
 
 
 class sMainWindow(QMainWindow):
+    """ Application main window class singleton. """
     _instance = None
     px = 50
     py = 50
@@ -454,11 +455,13 @@ class sMainWindow(QMainWindow):
     tlheight = 0
     tlabels = []
 
+    def __new__(cls, *args, title='', **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls, *args, **kwargs)
+        return cls._instance
+
     def __init__(self, *args, title='', **kwargs):
-        if self._instance:
-            raise Exception ('No more than one main window allowed!')
         super().__init__(*args, **kwargs)
-        _instance = self
         self.init_window(title)
 
     def closeEvent(self, event):

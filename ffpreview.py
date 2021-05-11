@@ -150,23 +150,31 @@ def configure():
 
     # parse command line arguments
     parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawTextHelpFormatter,
         description='Generate clickable video thumbnail preview.',
-        epilog='The -C, -i, -N, -n and -s options are mutually exclusive, -C beats -i beats -N beats -n beats -s.'
+        epilog='  The -C, -i, -N, -n and -s options are mutually exclusive. If more\n'
+               '  than one is supplied: -C beats -i beats -N beats -n beats -s.\n'
+               '\nwindow controls:\n'
+               '  ESC, Ctrl+Q     quit application\n'
+               '  Ctrl+G          adjust window geometry to optimal fit\n'
+               '  Mouse-1         open video at clicked position in paused state\n'
+               '  Shift+Mouse-1   play video starting at clicked position\n'
+               '  Mouse-2         open the context menu'
     )
     parser.add_argument('filename', help='input video file')
-    parser.add_argument('-c', '--config', metavar='FILE', help='read configuration from FILE')
-    parser.add_argument('-g', '--grid', metavar='C[xR]', help='number of columns and rows in preview')
+    parser.add_argument('-c', '--config', metavar='F', help='read configuration from file F')
+    parser.add_argument('-g', '--grid', metavar='G', help='set grid geometry in COLS[xROWS] format')
     parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
-    parser.add_argument('-t', '--tmpdir', metavar='path', help='path to thumbnail top level directory')
+    parser.add_argument('-t', '--tmpdir', metavar='P', help='set thumbnail parent directory to P')
     parser.add_argument('-f', '--force', action='count', help='force thumbnail and index rebuild')
     parser.add_argument('-r', '--reuse', action='count', help='reuse filter settings from index file')
     parser.add_argument('-i', '--iframe', action='count', help='select only I-frames (default)')
     parser.add_argument('-n', '--nskip', type=int, metavar='N', help='select only every Nth frame')
     parser.add_argument('-N', '--nsecs', type=float, metavar='F', help='select one frame every F seconds')
     parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold; 0 < F < 1')
-    parser.add_argument('-C', '--customvf', metavar='S', help='select by custom filter string S')
-    parser.add_argument('-S', '--start', metavar='TS', help='start video analysis at time TS')
-    parser.add_argument('-E', '--end', metavar='TS', help='end video analysis at time TS')
+    parser.add_argument('-C', '--customvf', metavar='S', help='select frames using custom filter string S')
+    parser.add_argument('-S', '--start', metavar='T', help='start video analysis at time T')
+    parser.add_argument('-E', '--end', metavar='T', help='end video analysis at time T')
     parser.add_argument('-v', '--verbose', action='count', help='be more verbose; repeat to increase')
     parser.add_argument('--version', action='count', help='print version info and exit')
     args = parser.parse_args()

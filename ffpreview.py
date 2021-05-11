@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 """
 ffpreview.py
@@ -36,12 +36,13 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
-FFPREVIEW_VERSION = '0.2+'
+_FFPREVIEW_VERSION = '0.2+'
 
 import sys
 
-if sys.version_info.major < 3:
-    raise Exception ('Need Python version 3 or later, got version ' + str(sys.version))
+_PYTHON_VERSION = float("%d.%d" % (sys.version_info.major, sys.version_info.minor))
+if _PYTHON_VERSION < 3.6:
+    raise Exception ('Need Python version 3.6 or later, got version ' + str(sys.version))
 
 import io
 import os
@@ -171,7 +172,7 @@ def configure():
     args = parser.parse_args()
 
     if args.version:
-        print('ffpreview version ' + FFPREVIEW_VERSION)
+        print('ffpreview version %s running on python %.1f.x' % (_FFPREVIEW_VERSION, _PYTHON_VERSION))
         exit(0)
 
     # parse config file

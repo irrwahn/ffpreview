@@ -337,6 +337,7 @@ class tLabel(QWidget):
             pl = QLabel()
             pl.setPixmap(pixmap)
             pl.setAlignment(Qt.AlignCenter)
+            pl.setStyleSheet('QLabel {padding: 2px;}')
             layout.addWidget(pl)
         if text is not None:
             tl = QLabel()
@@ -351,7 +352,7 @@ class tLabel(QWidget):
         self.window().statdsp[3].setText(self.info[1])
 
     def leaveEvent(self, event):
-        self.setStyleSheet('QLabel {}')
+        self.setStyleSheet('QLabel {background-color: transparent;}')
         self.window().statdsp[3].setText('')
 
     def mouseReleaseEvent(self, event):
@@ -493,12 +494,11 @@ class sMainWindow(QMainWindow):
         self.scroll.setStyleSheet('QFrame {border: none;}')
         self.thumb_layout = QGridLayout(self.scrollframe)
         self.thumb_layout.setContentsMargins(0, 0, 0, 0)
-        self.thumb_layout.setHorizontalSpacing(0)
-        self.thumb_layout.setHorizontalSpacing(0)
+        self.thumb_layout.setSpacing(0)
 
         self.main_frame = QWidget()
         self.main_layout = QVBoxLayout(self.main_frame)
-        self.main_layout.setContentsMargins(0, 4, 0, 0)
+        self.main_layout.setContentsMargins(0, 2, 0, 0)
         self.main_layout.addWidget(self.scroll)
         self.main_layout.addLayout(self.statbar)
         self.setCentralWidget(self.main_frame)
@@ -772,10 +772,10 @@ def main():
     root.statdsp[0].setText('Loading:')
     root.progbar.show()
     tlabels = make_tlabels(root.tlabels, root.statdsp[1], root.progbar, root.broken_img)
-    root.tlwidth = tlabels[0].width() + 6
-    root.tlheight = tlabels[0].height() + 6
 
     # roughly fix window geometry
+    root.tlwidth = tlabels[0].width()
+    root.tlheight = tlabels[0].height()
     w = root.tlwidth * cfg['grid_columns'] + root.px
     h = root.tlheight * cfg['grid_rows'] + root.py
     root.resize(w, h)

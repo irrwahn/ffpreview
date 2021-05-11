@@ -151,9 +151,12 @@ def configure():
     # parse command line arguments
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawTextHelpFormatter,
-        description='Generate clickable video thumbnail preview.',
+        description='Generate interactive video thumbnail preview.',
         epilog='  The -C, -i, -N, -n and -s options are mutually exclusive. If more\n'
-               '  than one is supplied: -C beats -i beats -N beats -n beats -s.\n'
+               '  than one is supplied: -C beats -i beats -N beats -n beats -s.\n\n'
+               '  The -r option causes ffpreview to ignore any of the -w, -C, -i\n'
+               '  -N, -n and -s options, provided that filename, duration, start\n'
+               '  and end times match, and the index file appears to be healthy.\n'
                '\nwindow controls:\n'
                '  ESC, Ctrl+Q     quit application\n'
                '  Ctrl+G          adjust window geometry to optimal fit\n'

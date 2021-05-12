@@ -808,6 +808,7 @@ def chk_idxfile(thinfo):
 def get_thinfo():
     thinfo = {
         'name': os.path.basename(cfg['vid']),
+        'path': os.getcwd(),
         'frames': -1,
         'duration': -1,
         'fps': -1,

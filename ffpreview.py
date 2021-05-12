@@ -97,7 +97,7 @@ def configure():
         'home': expanduser("~"),
         'conffile': 'ffpreview.conf',
         'vid': '',
-        'tmpdir': '',
+        'outdir': '',
         'thdir': '',
         'idxfile': '',
         'grid': '5x5',
@@ -148,7 +148,7 @@ def configure():
     parser.add_argument('-c', '--config', metavar='F', help='read configuration from file F')
     parser.add_argument('-g', '--grid', metavar='G', help='set grid geometry in COLS[xROWS] format')
     parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
-    parser.add_argument('-t', '--tmpdir', metavar='P', help='set thumbnail parent directory to P')
+    parser.add_argument('-o', '--outdir', metavar='P', help='set thumbnail parent directory to P')
     parser.add_argument('-f', '--force', action='count', help='force thumbnail and index rebuild')
     parser.add_argument('-r', '--reuse', action='count', help='reuse filter settings from index file')
     parser.add_argument('-i', '--iframe', action='count', help='select only I-frames (default)')
@@ -200,8 +200,8 @@ def configure():
 
     # evaluate remaining command line args
     cfg['vid'] = args.filename
-    if args.tmpdir:
-        cfg['tmpdir'] = args.tmpdir
+    if args.outdir:
+        cfg['outdir'] = args.outdir
     if args.start:
         cfg['start'] = hms2s(args.start)
     if args.end:
@@ -261,10 +261,10 @@ def configure():
         cfg['grid_rows'] = int(grid[1])
 
     # prepare temp directory
-    if not cfg['tmpdir']:
-        cfg['tmpdir'] = tempfile.gettempdir()
+    if not cfg['outdir']:
+        cfg['outdir'] = tempfile.gettempdir()
     try:
-        os.makedirs(cfg['tmpdir'], exist_ok=True)
+        os.makedirs(cfg['outdir'], exist_ok=True)
     except Exception as e:
         eprint(0, str(e))
         exit(1)
@@ -577,7 +577,7 @@ class sMainWindow(QMainWindow):
         self.setWindowTitle('ffpreview - '+cfg['vid'])
 
         # prepare thumbnail directory
-        cfg['thdir'] = cfg['tmpdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'])
+        cfg['thdir'] = cfg['outdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'])
         try:
             os.makedirs(cfg['thdir'], exist_ok=True)
         except Exception as e:

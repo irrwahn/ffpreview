@@ -4,7 +4,7 @@
 
 # Output directory path.
 # A separate subdirectory is created for each video file.
-tmpdir=
+outdir=
 
 # Target width in pixels for thumbnails.
 thumb_width=128

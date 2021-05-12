@@ -49,7 +49,7 @@ optional arguments:
   -c F, --config F    read configuration from file F
   -g G, --grid G      set grid geometry in COLS[xROWS] format
   -w N, --width N     thumbnail image width in pixel
-  -t P, --tmpdir P    set thumbnail parent directory to P
+  -o P, --outdir P    set thumbnail parent directory to P
   -f, --force         force thumbnail and index rebuild
   -r, --reuse         reuse filter settings from index file
   -i, --iframe        select only I-frames (default)

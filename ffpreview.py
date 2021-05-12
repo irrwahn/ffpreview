@@ -133,6 +133,7 @@ def configure():
                '\nwindow controls:\n'
                '  ESC, Ctrl+Q     quit application\n'
                '  Ctrl+G          adjust window geometry to optimal fit\n'
+               '  Ctrl+O          show open file dialog\n'
                '  Double-click    open video at clicked position in paused state\n'
                '  Shift-click     play video starting at clicked position\n'
                '  Mouse-2         open the context menu\n'
@@ -143,7 +144,7 @@ def configure():
                '  Shift+Enter     play video starting at selected position\n'
                '  Alt+Enter       open the context menu\n'
     )
-    parser.add_argument('filename', help='input video file')
+    parser.add_argument('filename', nargs='?', default=os.getcwd(), help='input video file')
     parser.add_argument('-c', '--config', metavar='F', help='read configuration from file F')
     parser.add_argument('-g', '--grid', metavar='G', help='set grid geometry in COLS[xROWS] format')
     parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
@@ -267,15 +268,6 @@ def configure():
     except Exception as e:
         eprint(0, str(e))
         exit(1)
-
-    # prepare thumbnail directory
-    cfg['thdir'] = cfg['tmpdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'])
-    try:
-        os.makedirs(cfg['thdir'], exist_ok=True)
-    except Exception as e:
-        eprint(0, str(e))
-        exit(1)
-    cfg['idxfile'] = cfg['thdir'] + '/ffpreview.idx'
 
     return cfg
     # end of configure()
@@ -409,13 +401,15 @@ class tLabel(QWidget):
                     lambda: self.window().clipboard.setText(self.info[2]))
         menu.addSeparator()
         menu.addAction('Copy Original Filename',
-                    lambda: self.window().clipboard.setText(cfg['vid']))
+                    lambda: self.window().clipboard.setText(os.getcwd()+'/'+cfg['vid']))
         menu.addAction('Copy Thumb Filename',
                     lambda: self.window().clipboard.setText(cfg['thdir'] + '/' + self.info[1]))
         menu.addAction('Copy Thumbnail Image',
                     lambda: self.window().clipboard.setPixmap(self.layout().itemAt(0).widget().pixmap()))
         menu.addSeparator()
         menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
+        menu.addSeparator()
+        menu.addAction('Open Video File...', lambda: self.window().load_view(os.getcwd()))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
         menu.exec_(self.mapToGlobal(pos))
@@ -494,6 +488,14 @@ class sMainWindow(QMainWindow):
         self.scrollframe.setUpdatesEnabled(True)
         self.set_cursor()
 
+    def clear_grid(self):
+        self.cur = 0
+        for tl in self.tlabels:
+            self.thumb_layout.removeWidget(tl)
+            tl.setParent(None)
+            tl.close()
+        self.tlabels = []
+
     def set_cursor(self, idx=None):
         l = self.tlabels
         if len(l) < 1:
@@ -558,6 +560,7 @@ class sMainWindow(QMainWindow):
         QShortcut('Ctrl+Q', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+W', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+G', self).activated.connect(self.optimize_extent)
+        QShortcut('Ctrl+O', self).activated.connect(lambda: self.load_view(os.getcwd()))
         QShortcut('Tab', self).activated.connect(lambda: self.advance_cursor(1))
         QShortcut('Shift+Tab', self).activated.connect(lambda: self.advance_cursor(-1))
         QShortcut('Right', self).activated.connect(lambda: self.advance_cursor(1))
@@ -574,6 +577,76 @@ class sMainWindow(QMainWindow):
                     lambda: self.tlabels[self.cur].contextMenu_show(QPoint(self.tlwidth/2, self.tlheight/2)))
         self.set_cursor(0)
 
+    def load_view(self, fname):
+        # sanitize file name
+        if not os.path.exists(fname) or not os.access(fname, os.R_OK):
+            fname = os.path.dirname(fname)
+            if not os.path.isdir(fname):
+                fname = os.getcwd()
+        if os.path.isdir(fname):
+            options = QFileDialog.Options()
+            options |= QFileDialog.DontUseNativeDialog
+            fname, _ = QFileDialog.getOpenFileName(self, 'Open File', fname,
+                        'Video Files (*.avi *.mkv *.mp4);;All Files (*)', options=options)
+        if not os.path.exists(fname) or not os.access(fname, os.R_OK):
+            return
+        cfg['vid'] = os.path.basename(fname)
+        os.chdir(os.path.dirname(fname))
+        self.setWindowTitle('ffpreview - '+cfg['vid'])
+
+        # prepare thumbnail directory
+        cfg['thdir'] = cfg['tmpdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'])
+        try:
+            os.makedirs(cfg['thdir'], exist_ok=True)
+        except Exception as e:
+            eprint(0, str(e))
+            exit(1)
+        cfg['idxfile'] = cfg['thdir'] + '/ffpreview.idx'
+
+        # clear previous view
+        self.statdsp[0].setText('Clearing view ...')
+        QApplication.processEvents()
+        self.clear_grid()
+
+        # analyze video and prepare info and thumbnail files
+        self.statdsp[0].setText('Analyzing ...')
+        QApplication.processEvents()
+        thinfo, ok = get_thinfo()
+        if not ok:
+            # (re)generate thumbnails and index file
+            self.statdsp[0].setText('Processing video:')
+            clear_thumbdir()
+            thinfo = make_thumbs(cfg['vid'], thinfo, self.statdsp[1], self.progbar)
+
+        # load thumbnails and make labels
+        self.statdsp[0].setText('Loading:')
+        self.progbar.show()
+        tlabels = make_tlabels(self.tlabels, self.statdsp[1], self.progbar, self.broken_img)
+
+        # roughly fix window geometry
+        self.tlwidth = tlabels[0].width()
+        self.tlheight = tlabels[0].height()
+        w = self.tlwidth * cfg['grid_columns'] + self.px
+        h = self.tlheight * cfg['grid_rows'] + self.py
+        self.resize(w, h)
+
+        # fill the view grid
+        self.progbar.hide()
+        self.statdsp[0].setText(' Generating view ...')
+        self.statdsp[1].setText('')
+        self.statdsp[2].setText('')
+        QApplication.processEvents()
+        self.fill_grid()
+        QApplication.processEvents()
+
+        # final window touch-up
+        self.statdsp[0].setText(' Duration: ' + str(thinfo["duration"]) + ' s')
+        self.statdsp[1].setText(' Thumbs: ' + str(thinfo["count"]))
+        self.statdsp[2].setText(' Method: ' + str(thinfo["method"]))
+        QApplication.processEvents()
+        self.calculate_props()
+        self.setMinimumSize(self.tlwidth + self.px, self.tlheight + self.py)
+        self.optimize_extent()
 
 ############################################################
 # Helper functions
@@ -678,14 +751,12 @@ def make_thumbs(vidfile, thinfo, ilabel, pbar):
         if retval != 0:
             eprint(0, cmd + '\n  returned %d' % retval)
             eprint(1, ebuf)
-            die(retval)
         thinfo['count'] = cnt
         with open(cfg['idxfile'], 'w') as idxfile:
             json.dump(thinfo, idxfile, indent=2)
-        return thinfo
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
-        die(2)
+    return thinfo
 
 # open video in player
 def play_video(filename, start='0', paused=False):
@@ -791,7 +862,6 @@ def make_tlabels(tlabels, ilabel, pbar, dummy_img):
     except Exception as e:
         eprint(0, str(e))
     if len(tlabels) == 0:
-        print('huhu')
         # no thumbnails available, make dummy
         th = [0, 'broken', str(cfg['start'])]
         thumb = dummy_img.scaledToWidth(cfg['thumb_width'])
@@ -819,48 +889,9 @@ def main():
     os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
     app = QApplication(sys.argv)
     app.setApplicationName('ffpreview')
-    root = sMainWindow(title='ffpreview - '+cfg['vid'])
+    root = sMainWindow(title='ffpreview')
     root.show()
-
-    # analyze video and prepare info and thumbnail files
-    root.statdsp[0].setText('Analyzing ...')
-    QApplication.processEvents()
-    thinfo, ok = get_thinfo()
-    if not ok:
-        # (re)generate thumbnails and index file
-        root.statdsp[0].setText('Processing video:')
-        clear_thumbdir()
-        thinfo = make_thumbs(cfg['vid'], thinfo, root.statdsp[1], root.progbar)
-
-    # load thumbnails and make labels
-    root.statdsp[0].setText('Loading:')
-    root.progbar.show()
-    tlabels = make_tlabels(root.tlabels, root.statdsp[1], root.progbar, root.broken_img)
-
-    # roughly fix window geometry
-    root.tlwidth = tlabels[0].width()
-    root.tlheight = tlabels[0].height()
-    w = root.tlwidth * cfg['grid_columns'] + root.px
-    h = root.tlheight * cfg['grid_rows'] + root.py
-    root.resize(w, h)
-
-    # fill the view grid
-    root.progbar.hide()
-    root.statdsp[0].setText(' Generating view ...')
-    root.statdsp[1].setText('')
-    root.statdsp[2].setText('')
-    QApplication.processEvents()
-    root.fill_grid()
-    QApplication.processEvents()
-
-    # final window touch-up
-    root.statdsp[0].setText(' Duration: ' + str(thinfo["duration"]) + ' s')
-    root.statdsp[1].setText(' Thumbs: ' + str(thinfo["count"]))
-    root.statdsp[2].setText(' Method: ' + str(thinfo["method"]))
-    QApplication.processEvents()
-    root.calculate_props()
-    root.setMinimumSize(root.tlwidth + root.px, root.tlheight + root.py)
-    root.optimize_extent()
+    root.load_view(cfg['vid'])
 
     # start main loop
     exit(app.exec_())

@@ -37,7 +37,7 @@ Running `ffpreview.py -h` will print the following help text:
 ```
 usage: ffpreview.py [-h] [-c F] [-g G] [-w N] [-t P] [-f] [-r] [-i] [-n N]
                     [-N F] [-s F] [-C S] [-S T] [-E T] [-v] [--version]
-                    filename
+                    [filename]
 
 Generate interactive video thumbnail preview.
 
@@ -72,6 +72,7 @@ optional arguments:
 window controls:
   ESC, Ctrl+Q     quit application
   Ctrl+G          adjust window geometry to optimal fit
+  Ctrl+O          show open file dialog
   Double-click    open video at clicked position in paused state
   Shift-click     play video starting at clicked position
   Mouse-2         open the context menu

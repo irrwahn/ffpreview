@@ -424,6 +424,21 @@ class tScrollArea(QScrollArea):
             cfg['grid_columns'] = cols
             self.window().fill_grid()
 
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        menu.addAction('Play From Start',
+                    lambda: play_video(cfg['vid']))
+        menu.addSeparator()
+        menu.addAction('Copy Original Filename',
+                    lambda: self.window().clipboard.setText(os.getcwd()+'/'+cfg['vid']))
+        menu.addSeparator()
+        menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
+        menu.addSeparator()
+        menu.addAction('Open Video File...', lambda: self.window().load_view(os.getcwd()))
+        menu.addSeparator()
+        menu.addAction('Quit', lambda: die(0))
+        menu.exec_(self.mapToGlobal(event.pos()))
+
 
 class sMainWindow(QMainWindow):
     """ Application main window class singleton. """

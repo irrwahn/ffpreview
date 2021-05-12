@@ -465,6 +465,10 @@ class sMainWindow(QMainWindow):
             x += 1
             if x >= cfg['grid_columns']:
                 x = 0; y += 1
+        if y < cfg['grid_rows']:
+            cfg['grid_rows'] = y + 1
+        if y == 0 and x < cfg['grid_columns']:
+            cfg['grid_columns'] = x
         self.scrollframe.setUpdatesEnabled(True)
         self.set_cursor()
 

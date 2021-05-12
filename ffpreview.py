@@ -119,6 +119,7 @@ def configure():
         'start': '0',
         'end': '0',
         'verbosity': 0,
+        'batch': 0
     }
 
     # parse command line arguments
@@ -144,7 +145,8 @@ def configure():
                '  Shift+Enter     play video starting at selected position\n'
                '  Alt+Enter       open the context menu\n'
     )
-    parser.add_argument('filename', nargs='?', default=os.getcwd(), help='input video file')
+    parser.add_argument('filename', nargs='+', default=os.getcwd(), help='input video file')
+    parser.add_argument('-b', '--batch', action='count', help='batch mode, do not draw window')
     parser.add_argument('-c', '--config', metavar='F', help='read configuration from file F')
     parser.add_argument('-g', '--grid', metavar='G', help='set grid geometry in COLS[xROWS] format')
     parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
@@ -231,6 +233,8 @@ def configure():
         cfg['customvf'] = args.customvf
     if args.verbose:
         cfg['verbosity'] = args.verbose
+    if args.batch:
+        cfg['batch'] = args.batch
 
     # clear unused method parameters
     if cfg['method'] == 'scene':
@@ -624,7 +628,8 @@ class sMainWindow(QMainWindow):
             # (re)generate thumbnails and index file
             self.statdsp[0].setText('Processing video:')
             clear_thumbdir()
-            thinfo = make_thumbs(cfg['vid'], thinfo, self.statdsp[1], self.progbar)
+            self.progbar.show()
+            thinfo, _ = make_thumbs(cfg['vid'], thinfo, self.statdsp[1], self.progbar)
 
         # load thumbnails and make labels
         self.statdsp[0].setText('Loading:')
@@ -711,8 +716,9 @@ def get_meta(vidfile):
     return meta
 
 # extract thumbnails from video and collect timestamps
-def make_thumbs(vidfile, thinfo, ilabel, pbar):
+def make_thumbs(vidfile, thinfo, ilabel=None, pbar=None):
     global proc
+    rc = False
     pictemplate = '%08d.png'
     cmd = cfg['ffmpeg'] + ' -loglevel info -hide_banner -y'
     if cfg['start']:
@@ -737,7 +743,6 @@ def make_thumbs(vidfile, thinfo, ilabel, pbar):
     ebuf = ''
     cnt = 0
     try:
-        pbar.show()
         proc = Popen('exec ' + cmd, shell=True, stderr=PIPE)
         while proc.poll() is None:
             line = proc.stderr.readline()
@@ -751,20 +756,26 @@ def make_thumbs(vidfile, thinfo, ilabel, pbar):
                     if cfg['start']:
                         t = str(float(t) + cfg['start'])
                     thinfo['th'].append([ cnt, pictemplate % cnt, t ])
-                    ilabel.setText('%s / %d s' % (t.split('.')[0], thinfo['duration']))
-                    pbar.setValue(float(t) * 100 / thinfo['duration'])
-                    QApplication.processEvents()
+                    if ilabel and pbar:
+                        ilabel.setText('%s / %d s' % (t.split('.')[0], thinfo['duration']))
+                        pbar.setValue(float(t) * 100 / thinfo['duration'])
+                        QApplication.processEvents()
+                    else:
+                        eprint(1, '%s / %d s\r' % (t.split('.')[0], thinfo['duration']), end='')
         retval = proc.wait()
         proc = None
+        if not ilabel or not pbar:
+            eprint(1, '                                  \r', end='')
         if retval != 0:
             eprint(0, cmd + '\n  returned %d' % retval)
             eprint(1, ebuf)
         thinfo['count'] = cnt
         with open(cfg['idxfile'], 'w') as idxfile:
             json.dump(thinfo, idxfile, indent=2)
+            rc = True
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
-    return thinfo
+    return thinfo, rc
 
 # open video in player
 def play_video(filename, start='0', paused=False):
@@ -878,6 +889,47 @@ def make_tlabels(tlabels, ilabel, pbar, dummy_img):
         tlabels.append(tlabel)
     return tlabels
 
+# process a single file in console-only mode
+def batch_process(fname):
+    # sanitize file name
+    if not os.path.exists(fname) or not os.access(fname, os.R_OK):
+        eprint(0, '%s: no permission' % fname)
+        return False
+    if os.path.isdir(fname):
+        eprint(0, '%s is a directory!' % fname)
+        return False
+    cfg['vid'] = os.path.basename(fname)
+
+    # prepare thumbnail directory
+    cfg['thdir'] = cfg['outdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'])
+    try:
+        os.makedirs(cfg['thdir'], exist_ok=True)
+    except Exception as e:
+        eprint(0, str(e))
+        return False
+    cfg['idxfile'] = cfg['thdir'] + '/ffpreview.idx'
+
+    # analyze video and prepare info and thumbnail files
+    fdir = os.path.dirname(fname)
+    if fdir:
+        olddir = os.getcwd()
+        os.chdir(fdir)
+    eprint(0, 'Analyzing  %s ...\r' % cfg['vid'], end='')
+    thinfo, ok = get_thinfo()
+    if not ok:
+        # (re)generate thumbnails and index file
+        eprint(0, 'Processing')
+        clear_thumbdir()
+        thinfo, ok = make_thumbs(cfg['vid'], thinfo)
+    else:
+        eprint(0, '')
+    if ok:
+        eprint(0, 'Ok.')
+    else:
+        eprint(0, 'Failed.')
+    if olddir:
+        os.chdir(olddir)
+    return ok
 
 ############################################################
 # main function
@@ -894,6 +946,18 @@ def main():
     signal.signal(signal.SIGQUIT, sig_handler)
     signal.signal(signal.SIGTERM, sig_handler)
     signal.signal(signal.SIGPIPE, signal.SIG_IGN)
+
+    if cfg['batch']:
+        if isinstance(cfg['vid'], list):
+            for fn in cfg['vid']:
+                ok = batch_process(fn)
+        else:
+            ok = batch_process(cfg['vid'])
+        exit(0 if ok else 3)
+
+    if isinstance(cfg['vid'], list):
+        eprint(0, 'Only using first file in interactive mode.')
+        cfg['vid'] = cfg['vid'][0]
 
     os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
     app = QApplication(sys.argv)

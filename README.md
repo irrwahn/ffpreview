@@ -35,8 +35,8 @@ configuration file, see `ffpreview.conf.sample`.
 Running `ffpreview.py -h` will print the following help text:
 
 ```
-usage: ffpreview.py [-h] [-c F] [-g G] [-w N] [-t P] [-f] [-r] [-i] [-n N]
-                    [-N F] [-s F] [-C S] [-S T] [-E T] [-v] [--version]
+usage: ffpreview.py [-h] [-b] [-c F] [-g G] [-w N] [-o P] [-f] [-r] [-i]
+                    [-n N] [-N F] [-s F] [-C S] [-S T] [-E T] [-v] [--version]
                     [filename]
 
 Generate interactive video thumbnail preview.
@@ -46,6 +46,7 @@ positional arguments:
 
 optional arguments:
   -h, --help          show this help message and exit
+  -b, --batch         batch mode, do not draw window
   -c F, --config F    read configuration from file F
   -g G, --grid G      set grid geometry in COLS[xROWS] format
   -w N, --width N     thumbnail image width in pixel

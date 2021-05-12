@@ -571,7 +571,9 @@ class sMainWindow(QMainWindow):
         if not os.path.exists(fname) or not os.access(fname, os.R_OK):
             return
         cfg['vid'] = os.path.basename(fname)
-        os.chdir(os.path.dirname(fname))
+        fdir = os.path.dirname(fname)
+        if fdir:
+            os.chdir(fdir)
         self.setWindowTitle('ffpreview - '+cfg['vid'])
 
         # prepare thumbnail directory

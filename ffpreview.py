@@ -325,7 +325,7 @@ class sQIcon(QIcon):
             super().addPixmap(sQPixmap(imgdata=imgdata))
 
 class tLabel(QWidget):
-    __slots__ = ['info', 'focus', 'over']
+    __slots__ = ['info', 'focus']
     def __init__(self, *args, pixmap=None, text=None, info=None, **kwargs):
         super().__init__(*args, **kwargs)
         layout = QVBoxLayout(self)
@@ -343,37 +343,17 @@ class tLabel(QWidget):
             tl.setAlignment(Qt.AlignCenter)
             layout.addWidget(tl)
         self.info = info
-        self.focus = self.over = False
+        self.focus = False
         self.adjustSize()
-
-    def enterEvent(self, event):
-        self.over = True
-        if self.focus:
-            self.setStyleSheet('QLabel {font-weight: bold; background-color: %s;}' % cfg['highlightcolor'])
-        else:
-            self.setStyleSheet('QLabel {font-weight: bold;}')
-
-    def leaveEvent(self, event):
-        self.over = False
-        if self.focus:
-            self.setStyleSheet('QLabel {background-color: %s;}' % cfg['highlightcolor'])
-        else:
-            self.setStyleSheet('QLabel {}')
 
     def setFocus(self):
         self.focus = True
-        if self.over:
-            self.setStyleSheet('QLabel {font-weight: bold; background-color: %s;}' % cfg['highlightcolor'])
-        else:
-            self.setStyleSheet('QLabel {background-color: %s;}' % cfg['highlightcolor'])
+        self.setStyleSheet('QLabel {background-color: %s;}' % cfg['highlightcolor'])
         self.window().statdsp[3].setText(self.info[1])
 
     def unsetFocus(self):
         self.focus = False
-        if self.over:
-            self.setStyleSheet('QLabel {font-weight: bold}')
-        else:
-            self.setStyleSheet('QLabel {}')
+        self.setStyleSheet('QLabel {}')
         self.window().statdsp[3].setText('')
 
     def mouseReleaseEvent(self, event):

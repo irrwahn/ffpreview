@@ -345,6 +345,7 @@ class tLabel(QWidget):
         self.info = info
         self.focus = False
         self.adjustSize()
+        self.setMaximumSize(self.width(), self.height())
 
     def setFocus(self):
         self.focus = True

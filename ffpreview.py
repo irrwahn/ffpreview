@@ -474,13 +474,18 @@ class sMainWindow(QMainWindow):
 
     def fill_grid(self):
         self.scrollframe.setUpdatesEnabled(False)
-        x = 0; y = 0
+        l = len(self.tlabels)
+        x = 0; y = 0; cnt = 0
         for tl in self.tlabels:
             self.thumb_layout.removeWidget(tl)
             self.thumb_layout.addWidget(tl, y, x)
             x += 1
             if x >= cfg['grid_columns']:
                 x = 0; y += 1
+            if cnt % 100 == 0:
+                self.progbar.setValue(cnt * 100 / l)
+                QApplication.processEvents()
+            cnt += 1
         if y < cfg['grid_rows']:
             cfg['grid_rows'] = y + 1
         if y == 0 and x < cfg['grid_columns']:
@@ -633,12 +638,12 @@ class sMainWindow(QMainWindow):
         self.resize(w, h)
 
         # fill the view grid
-        self.progbar.hide()
         self.statdsp[0].setText(' Generating view ...')
         self.statdsp[1].setText('')
         self.statdsp[2].setText('')
         QApplication.processEvents()
         self.fill_grid()
+        self.progbar.hide()
         QApplication.processEvents()
 
         # final window touch-up

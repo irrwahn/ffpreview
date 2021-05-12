@@ -72,9 +72,15 @@ optional arguments:
 window controls:
   ESC, Ctrl+Q     quit application
   Ctrl+G          adjust window geometry to optimal fit
-  Mouse-1         open video at clicked position in paused state
-  Shift+Mouse-1   play video starting at clicked position
+  Double-click    open video at clicked position in paused state
+  Shift-click     play video starting at clicked position
   Mouse-2         open the context menu
+  Up, Down,
+  PgUp, PgDown,
+  Home, End       move highlighted selection marker
+  Enter           open video at selected position in paused state
+  Shift+Enter     play video starting at selected position
+  Alt+Enter       open the context menu
 ```
 ### Examples
 ```

@@ -133,9 +133,15 @@ def configure():
                '\nwindow controls:\n'
                '  ESC, Ctrl+Q     quit application\n'
                '  Ctrl+G          adjust window geometry to optimal fit\n'
-               '  Mouse-1         open video at clicked position in paused state\n'
-               '  Shift+Mouse-1   play video starting at clicked position\n'
-               '  Mouse-2         open the context menu'
+               '  Double-click    open video at clicked position in paused state\n'
+               '  Shift-click     play video starting at clicked position\n'
+               '  Mouse-2         open the context menu\n'
+               '  Up, Down,\n'
+               '  PgUp, PgDown,\n'
+               '  Home, End       move highlighted selection marker\n'
+               '  Enter           open video at selected position in paused state\n'
+               '  Shift+Enter     play video starting at selected position\n'
+               '  Alt+Enter       open the context menu\n'
     )
     parser.add_argument('filename', help='input video file')
     parser.add_argument('-c', '--config', metavar='F', help='read configuration from file F')
@@ -327,7 +333,7 @@ class sQIcon(QIcon):
             super().addPixmap(sQPixmap(imgdata=imgdata))
 
 class tLabel(QWidget):
-    __slots__ = ['info']
+    __slots__ = ['info', 'focus', 'over']
     def __init__(self, *args, pixmap=None, text=None, info=None, **kwargs):
         super().__init__(*args, **kwargs)
         layout = QVBoxLayout(self)
@@ -345,25 +351,52 @@ class tLabel(QWidget):
             tl.setAlignment(Qt.AlignCenter)
             layout.addWidget(tl)
         self.info = info
+        self.focus = self.over = False
         self.adjustSize()
 
     def enterEvent(self, event):
-        self.setStyleSheet('QLabel {background-color: %s;}' % cfg['highlightcolor'])
-        self.window().statdsp[3].setText(self.info[1])
+        self.over = True
+        if self.focus:
+            self.setStyleSheet('QLabel {font-weight: bold; background-color: %s;}' % cfg['highlightcolor'])
+        else:
+            self.setStyleSheet('QLabel {font-weight: bold;}')
 
     def leaveEvent(self, event):
-        self.setStyleSheet('QLabel {background-color: transparent;}')
+        self.over = False
+        if self.focus:
+            self.setStyleSheet('QLabel {background-color: %s;}' % cfg['highlightcolor'])
+        else:
+            self.setStyleSheet('QLabel {}')
+
+    def setFocus(self):
+        self.focus = True
+        if self.over:
+            self.setStyleSheet('QLabel {font-weight: bold; background-color: %s;}' % cfg['highlightcolor'])
+        else:
+            self.setStyleSheet('QLabel {background-color: %s;}' % cfg['highlightcolor'])
+        self.window().statdsp[3].setText(self.info[1])
+
+    def unsetFocus(self):
+        self.focus = False
+        if self.over:
+            self.setStyleSheet('QLabel {font-weight: bold}')
+        else:
+            self.setStyleSheet('QLabel {}')
         self.window().statdsp[3].setText('')
 
     def mouseReleaseEvent(self, event):
-        button = event.button()
-        if button == Qt.LeftButton:
-            if QApplication.keyboardModifiers() == Qt.ShiftModifier:
-                play_video(cfg['vid'], self.info[2])
-            else:
-                play_video(cfg['vid'], self.info[2], True)
+        self.window().set_cursorw(self)
+        if QApplication.keyboardModifiers() == Qt.ShiftModifier:
+            play_video(cfg['vid'], self.info[2])
+
+    def mouseDoubleClickEvent(self, event):
+        play_video(cfg['vid'], self.info[2], True)
 
     def contextMenuEvent(self, event):
+        self.window().set_cursorw(self)
+        self.contextMenu_show(event.pos())
+
+    def contextMenu_show(self, pos):
         menu = QMenu(self)
         menu.addAction('Play From Here',
                     lambda: play_video(cfg['vid'], self.info[2]))
@@ -385,7 +418,7 @@ class tLabel(QWidget):
         menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
-        menu.exec_(self.mapToGlobal(event.pos()))
+        menu.exec_(self.mapToGlobal(pos))
 
 
 class tScrollArea(QScrollArea):
@@ -406,7 +439,7 @@ class tScrollArea(QScrollArea):
         if tlwidth < 1 or tlheight < 1:
             return
         rows = int(self.viewport().height() / tlheight + 0.5)
-        self.verticalScrollBar().setPageStep((rows-1 if rows>1 else rows) * tlheight)
+        self.verticalScrollBar().setPageStep(rows * tlheight)
         self.verticalScrollBar().setSingleStep(tlheight)
         cfg['grid_rows'] = rows
         cols = int((self.viewport().width()) / tlwidth)
@@ -415,12 +448,6 @@ class tScrollArea(QScrollArea):
         if cols != cfg['grid_columns']:
             cfg['grid_columns'] = cols
             self.window().fill_grid()
-
-    def do_scroll(self, event):
-        if event == 'Home':
-            self.verticalScrollBar().setValue(self.verticalScrollBar().minimum());
-        elif event == 'End':
-            self.verticalScrollBar().setValue(self.verticalScrollBar().maximum());
 
 
 class sMainWindow(QMainWindow):
@@ -431,6 +458,7 @@ class sMainWindow(QMainWindow):
     tlwidth = 0
     tlheight = 0
     tlabels = []
+    cur = 0
 
     def __new__(cls, *args, title='', **kwargs):
         if cls._instance is None:
@@ -464,6 +492,29 @@ class sMainWindow(QMainWindow):
             if x >= cfg['grid_columns']:
                 x = 0; y += 1
         self.scrollframe.setUpdatesEnabled(True)
+        self.set_cursor()
+
+    def set_cursor(self, idx=None):
+        l = self.tlabels
+        if len(l) < 1:
+            return
+        if idx is None:
+            idx = self.cur
+        l[self.cur].unsetFocus()
+        if idx < 0:
+            idx = 0
+        elif idx >= len(l):
+            idx = len(l) - 1
+        self.cur = idx
+        l[self.cur].setFocus()
+        self.scroll.ensureWidgetVisible(l[self.cur], 0, 0)
+
+    def set_cursorw(self, label):
+        idx = self.tlabels.index(label)
+        self.set_cursor(idx)
+
+    def advance_cursor(self, amnt):
+        self.set_cursor(self.cur + amnt)
 
     def init_window(self, title):
         self.setWindowTitle(title)
@@ -507,8 +558,21 @@ class sMainWindow(QMainWindow):
         QShortcut('Ctrl+Q', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+W', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+G', self).activated.connect(self.optimize_extent)
-        QShortcut('Home', self).activated.connect(lambda: self.scroll.do_scroll('Home'))
-        QShortcut('End', self).activated.connect(lambda: self.scroll.do_scroll('End'))
+        QShortcut('Tab', self).activated.connect(lambda: self.advance_cursor(1))
+        QShortcut('Shift+Tab', self).activated.connect(lambda: self.advance_cursor(-1))
+        QShortcut('Right', self).activated.connect(lambda: self.advance_cursor(1))
+        QShortcut('Left', self).activated.connect(lambda: self.advance_cursor(-1))
+        QShortcut('Up', self).activated.connect(lambda: self.advance_cursor(-cfg['grid_columns']))
+        QShortcut('Down', self).activated.connect(lambda: self.advance_cursor(cfg['grid_columns']))
+        QShortcut('PgUp', self).activated.connect(lambda: self.advance_cursor(-cfg['grid_rows'] * cfg['grid_columns']))
+        QShortcut('PgDown', self).activated.connect(lambda: self.advance_cursor(cfg['grid_rows'] * cfg['grid_columns']))
+        QShortcut('Home', self).activated.connect(lambda: self.set_cursor(0))
+        QShortcut('End', self).activated.connect(lambda: self.set_cursor(len(self.tlabels)-1))
+        QShortcut('Return', self).activated.connect(lambda: play_video(cfg['vid'], self.tlabels[self.cur].info[2], True))
+        QShortcut('Shift+Return', self).activated.connect(lambda: play_video(cfg['vid'], self.tlabels[self.cur].info[2]))
+        QShortcut('Alt+Return', self).activated.connect(
+                    lambda: self.tlabels[self.cur].contextMenu_show(QPoint(self.tlwidth/2, self.tlheight/2)))
+        self.set_cursor(0)
 
 
 ############################################################

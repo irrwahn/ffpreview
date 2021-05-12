@@ -380,7 +380,7 @@ class tLabel(QWidget):
         menu.addAction('Copy Thumb Filename',
                     lambda: self.window().clipboard.setText(cfg['thdir'] + '/' + self.info[1]))
         menu.addAction('Copy Thumbnail Image',
-                    lambda: self.window().clipboard.setPixmap(self.layout.itemAt(0).widget().pixmap()))
+                    lambda: self.window().clipboard.setPixmap(self.layout().itemAt(0).widget().pixmap()))
         menu.addSeparator()
         menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
         menu.addSeparator()

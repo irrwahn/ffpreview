@@ -170,7 +170,8 @@ def configure():
     defconfpath = os.path.join( # try to determine user config file
         os.environ.get('APPDATA') or
         os.environ.get('XDG_CONFIG_HOME') or
-        os.path.join(os.environ['HOME'], '.config'),
+        os.path.join(os.environ['HOME'], '.config') or
+        sys.path[0],
         cfg['conffile']
     )
     if args.config:

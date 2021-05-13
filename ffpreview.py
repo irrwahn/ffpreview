@@ -94,7 +94,6 @@ def sig_handler(signum, frame):
 def configure():
     # set defaults
     cfg = {
-        'home': expanduser("~"),
         'conffile': 'ffpreview.conf',
         'vid': '',
         'outdir': '',
@@ -145,7 +144,7 @@ def configure():
                '  Shift+Enter     play video starting at selected position\n'
                '  Alt+Enter       open the context menu\n'
     )
-    parser.add_argument('filename', nargs='+', default=os.getcwd(), help='input video file')
+    parser.add_argument('filename', nargs='*', default=os.getcwd(), help='input video file')
     parser.add_argument('-b', '--batch', action='count', help='batch mode, do not draw window')
     parser.add_argument('-c', '--config', metavar='F', help='read configuration from file F')
     parser.add_argument('-g', '--grid', metavar='G', help='set grid geometry in COLS[xROWS] format')

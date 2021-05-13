@@ -25,9 +25,10 @@ for that purpose too, should `ffprobe` fail.
 
 ## Configuration
 
-All options available from the command line (see below) as well as the
-invocations used to start external programs can be specified in the
-configuration file, see `ffpreview.conf.sample`.
+With few exceptions all options available from the command line (see
+below) plus the invocations to start external programs can be specified
+in the configuration file, for details see the `ffpreview.conf.sample`
+example configuration.
 
 
 ## Usage
@@ -85,10 +86,22 @@ window controls:
   Alt+Enter       open the context menu
 ```
 ### Examples
+
+#### Start ffpreview with file open dialog:
+```
+$ ./ffpreview.py
+$ ./ffpreview.py /path/to/some/directory
+```
+
+#### Start ffpreview and show thumbnails for a single file:
 ```
 $ ./ffpreview.py my_video.mp4
-
 $ ./ffpreview.py -t ~/scratch -w 256 -g 8x4 -N 10 some_movie.mkv
+```
+
+#### Run ffpreview in batch mode:
+```
+$ ./ffpreview.py -b movie1.mkv movie2.mp4 another.mpg
 ```
 
 ## License

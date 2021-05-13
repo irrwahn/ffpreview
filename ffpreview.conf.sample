@@ -70,6 +70,7 @@ frame_skip=200
 time_skip=60
 
 # Custom ffmpeg filter string for method 'customvf'.
+# For more information on filter expressions refer to the ffmpeg man page.
 customvf=scdet=s=1:t=12
 
 # EOF

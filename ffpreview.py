@@ -97,6 +97,7 @@ def configure():
     cfg = {
         'conffile': 'ffpreview.conf',
         'vid': '',
+        'path': '',
         'outdir': '',
         'thdir': '',
         'idxfile': '',
@@ -374,7 +375,7 @@ class tLabel(QWidget):
             play_video(cfg['vid'], self.info[2])
 
     def mouseDoubleClickEvent(self, event):
-        play_video(cfg['vid'], self.info[2], True)
+        play_video(os.path.join(cfg['path'], cfg['vid']), self.info[2], True)
 
     def contextMenuEvent(self, event):
         self.window().set_cursorw(self)
@@ -383,9 +384,9 @@ class tLabel(QWidget):
     def contextMenu_show(self, pos):
         menu = QMenu(self)
         menu.addAction('Play From Here',
-                    lambda: play_video(cfg['vid'], self.info[2]))
+                    lambda: play_video(os.path.join(cfg['path'], cfg['vid']), self.info[2]))
         menu.addAction('Play From Start',
-                    lambda: play_video(cfg['vid']))
+                    lambda: play_video(os.path.join(cfg['path'], cfg['vid'])))
         menu.addSeparator()
         menu.addAction('Copy Timestamp [H:M:S.ms]',
                     lambda: self.window().clipboard.setText(s2hms(self.info[2])))
@@ -393,7 +394,7 @@ class tLabel(QWidget):
                     lambda: self.window().clipboard.setText(self.info[2]))
         menu.addSeparator()
         menu.addAction('Copy Original Filename',
-                    lambda: self.window().clipboard.setText(os.path.join(os.getcwd(), cfg['vid'])))
+                    lambda: self.window().clipboard.setText(os.path.join(cfg['path'], cfg['vid'])))
         menu.addAction('Copy Thumb Filename',
                     lambda: self.window().clipboard.setText(os.path.join(cfg['thdir'], self.info[1])))
         menu.addAction('Copy Thumbnail Image',
@@ -401,7 +402,7 @@ class tLabel(QWidget):
         menu.addSeparator()
         menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
         menu.addSeparator()
-        menu.addAction('Open Video File...', lambda: self.window().load_view(os.getcwd()))
+        menu.addAction('Open Video File...', lambda: self.window().load_view(cfg['path']))
         menu.addAction('Open Thumbs Manager', lambda: self.window().manage_thumbs(cfg['outdir']))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
@@ -441,11 +442,11 @@ class tScrollArea(QScrollArea):
                     lambda: play_video(cfg['vid']))
         menu.addSeparator()
         menu.addAction('Copy Original Filename',
-                    lambda: self.window().clipboard.setText(os.path.join(os.getcwd(), cfg['vid'])))
+                    lambda: self.window().clipboard.setText(os.path.join(cfg['path'], cfg['vid'])))
         menu.addSeparator()
         menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
         menu.addSeparator()
-        menu.addAction('Open Video File...', lambda: self.window().load_view(os.getcwd()))
+        menu.addAction('Open Video File...', lambda: self.window().load_view(cfg['path']))
         menu.addAction('Open Thumbs Manager', lambda: self.window().manage_thumbs(cfg['outdir']))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
@@ -577,7 +578,7 @@ class sMainWindow(QMainWindow):
         QShortcut('Ctrl+Q', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+W', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+G', self).activated.connect(self.optimize_extent)
-        QShortcut('Ctrl+O', self).activated.connect(lambda: self.load_view(os.getcwd()))
+        QShortcut('Ctrl+O', self).activated.connect(lambda: self.load_view(cfg['path']))
         QShortcut('Ctrl+M', self).activated.connect(lambda: self.manage_thumbs(cfg['outdir']))
         QShortcut('Tab', self).activated.connect(lambda: self.advance_cursor(1))
         QShortcut('Shift+Tab', self).activated.connect(lambda: self.advance_cursor(-1))
@@ -609,48 +610,43 @@ class sMainWindow(QMainWindow):
         if not os.path.exists(fname) or not os.access(fname, os.R_OK):
             return
         cfg['vid'] = os.path.basename(fname)
-        fdir = os.path.dirname(fname)
-        if fdir:
-            os.chdir(fdir)
-        self.setWindowTitle('ffpreview - '+cfg['vid'])
-
-        # prepare thumbnail directory
+        cfg['path'] = os.path.dirname(os.path.abspath(fname))
         cfg['thdir'] = os.path.join(cfg['outdir'], os.path.basename(cfg['vid']))
-        try:
-            os.makedirs(cfg['thdir'], exist_ok=True)
-        except Exception as e:
-            eprint(0, str(e))
-            exit(1)
         cfg['idxfile'] = os.path.join(cfg['thdir'], 'ffpreview.idx')
-
+        self.setWindowTitle('ffpreview - ' + cfg['vid'])
         # clear previous view
         self.statdsp[0].setText('Clearing view ...')
         QApplication.processEvents()
         self.clear_grid()
-
-        # analyze video and prepare info and thumbnail files
+        # analyze video
         self.statdsp[0].setText('Analyzing ...')
         QApplication.processEvents()
-        thinfo, ok = get_thinfo()
+        thinfo, ok = get_thinfo(fname)
+        if thinfo is None:
+            self.statdsp[0].setText('Unrecognized file format')
+            return
         if not ok:
+            # prepare thumbnail directory
+            try:
+                os.makedirs(cfg['thdir'], exist_ok=True)
+            except Exception as e:
+                eprint(0, str(e))
+                return False
             # (re)generate thumbnails and index file
             self.statdsp[0].setText('Processing video:')
             clear_thumbdir()
             self.progbar.show()
-            thinfo, _ = make_thumbs(cfg['vid'], thinfo, self.statdsp[1], self.progbar)
-
+            thinfo, ok = make_thumbs(fname, thinfo, self.statdsp[1], self.progbar)
         # load thumbnails and make labels
         self.statdsp[0].setText('Loading:')
         self.progbar.show()
         tlabels = make_tlabels(self.tlabels, self.statdsp[1], self.progbar, self.broken_img)
-
         # roughly fix window geometry
         self.tlwidth = tlabels[0].width()
         self.tlheight = tlabels[0].height()
         w = self.tlwidth * cfg['grid_columns'] + self.px
         h = self.tlheight * cfg['grid_rows'] + self.py
         self.resize(w, h)
-
         # fill the view grid
         self.statdsp[0].setText(' Generating view ...')
         self.statdsp[1].setText('')
@@ -659,7 +655,6 @@ class sMainWindow(QMainWindow):
         self.fill_grid()
         self.progbar.hide()
         QApplication.processEvents()
-
         # final window touch-up
         self.statdsp[0].setText(' Duration: ' + str(thinfo["duration"]) + ' s')
         self.statdsp[1].setText(' Thumbs: ' + str(thinfo["count"]))
@@ -765,7 +760,7 @@ def get_meta(vidfile):
             d = float(info['format']['duration'])
             meta['duration'] = int(d)
             meta['fps'] = round(meta['frames'] / d, 2)
-            return meta
+            return meta, True
         else:
             eprint(0, cmd + '\n  returned %d' % retval)
             eprint(1, stderr.decode())
@@ -788,13 +783,13 @@ def get_meta(vidfile):
                     d = hms2s(m.group(2))
                     meta['duration'] = int(d)
                     meta['fps'] = round(meta['frames'] / d, 2)
-                    return meta
+                    return meta, True
         else:
             eprint(0, cmd + '\n  returned %d' % retval)
             eprint(1, stderr.decode())
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
-    return meta
+    return meta, False
 
 # extract thumbnails from video and collect timestamps
 def make_thumbs(vidfile, thinfo, ilabel=None, pbar=None):
@@ -903,10 +898,11 @@ def chk_idxfile(thinfo):
     return False
 
 # initialize thumbnail info structure
-def get_thinfo():
+def get_thinfo(vidfile):
+    vidfile = os.path.abspath(vidfile)
     thinfo = {
-        'name': os.path.basename(cfg['vid']),
-        'path': os.getcwd(),
+        'name': os.path.basename(vidfile),
+        'path': os.path.dirname(vidfile),
         'frames': -1,
         'duration': -1,
         'fps': -1,
@@ -922,7 +918,10 @@ def get_thinfo():
         'date': 0,
         'th': []
     }
-    thinfo.update(get_meta(cfg['vid']))
+    meta, ok = get_meta(vidfile)
+    if not ok:
+        return None, False
+    thinfo.update(meta)
     thinfo['date'] = int(time.time())
     if not cfg['force']:
         chk = chk_idxfile(thinfo)
@@ -980,37 +979,33 @@ def batch_process(fname):
         eprint(0, '%s is a directory!' % fname)
         return False
     cfg['vid'] = os.path.basename(fname)
-
-    # prepare thumbnail directory
-    cfg['thdir'] = os.path.join(cfg['outdir'], os.path.basename(cfg['vid']))
-    try:
-        os.makedirs(cfg['thdir'], exist_ok=True)
-    except Exception as e:
-        eprint(0, str(e))
-        return False
+    cfg['path'] = os.path.dirname(os.path.abspath(fname))
+    cfg['thdir'] = os.path.join(cfg['outdir'], cfg['vid'])
     cfg['idxfile'] = os.path.join(cfg['thdir'], 'ffpreview.idx')
-
-    # analyze video and prepare info and thumbnail files
-    olddir = None
-    fdir = os.path.dirname(fname)
-    if fdir:
-        olddir = os.getcwd()
-        os.chdir(fdir)
+    # analyze video
     print('Analyzing  %s ...\r' % cfg['vid'], end='', file=sys.stderr)
-    thinfo, ok = get_thinfo()
+    thinfo, ok = get_thinfo(fname)
+    if thinfo is None:
+        print('\nFailed.', file=sys.stderr)
+        return False
+    # prepare info and thumbnail files
     if not ok:
+        # prepare thumbnail directory
+        try:
+            os.makedirs(cfg['thdir'], exist_ok=True)
+        except Exception as e:
+            eprint(0, str(e))
+            return False
         # (re)generate thumbnails and index file
         print('Processing', file=sys.stderr)
         clear_thumbdir()
-        thinfo, ok = make_thumbs(cfg['vid'], thinfo)
+        thinfo, ok = make_thumbs(fname, thinfo)
     else:
         print('', file=sys.stderr)
     if ok:
-        print('Ok.', file=sys.stderr)
+        print('Ok.        ', file=sys.stderr)
     else:
-        print('Failed.', file=sys.stderr)
-    if olddir:
-        os.chdir(olddir)
+        print('Failed.    ', file=sys.stderr)
     return ok
 
 def get_indexfiles(path):

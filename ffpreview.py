@@ -683,9 +683,7 @@ class sMainWindow(QMainWindow):
                 item.vfile = entry['vfile']
                 lw.addItem(item)
 
-        def remove(doit, dirs, lw, outdir):
-            if not doit:
-                return
+        def remove(dirs, lw, outdir):
             for d in dirs:
                 rm = os.path.join(outdir, d)
                 eprint(1, "remove tree: ", rm)
@@ -701,11 +699,10 @@ class sMainWindow(QMainWindow):
             mbox.setIcon(QMessageBox.Warning)
             mbox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
             mbox.setDefaultButton(QMessageBox.Cancel)
-            mbox.buttonClicked.connect(lambda x: remove(x.text()=='OK', dirs, lw, outdir))
             mbox.setWindowTitle('Remove Thumbnails')
             mbox.setText('Confirm removal of %d folder%s.' % (l, 's' if l>1 else ''))
-            mbox.setInformativeText('Are you sure?')
-            mbox.exec_()
+            if QMessageBox.Ok == mbox.exec_():
+                remove(dirs, lw, outdir)
 
         def load_thumbs(item):
             if item.vfile:

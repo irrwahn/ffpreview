@@ -98,7 +98,7 @@ $ ./ffpreview.py /path/to/some/directory
 #### Start ffpreview and show thumbnails for a single file:
 ```
 $ ./ffpreview.py my_video.mp4
-$ ./ffpreview.py -t ~/scratch -w 256 -g 8x4 -N 10 some_movie.mkv
+$ ./ffpreview.py -o ~/scratch -w 256 -g 8x4 -N 10 some_movie.mkv
 ```
 
 #### Run ffpreview in batch mode:

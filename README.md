@@ -36,9 +36,9 @@ example configuration.
 Running `ffpreview.py -h` will print the following help text:
 
 ```
-usage: ffpreview.py [-h] [-b] [-c F] [-g G] [-w N] [-o P] [-f] [-r] [-i]
+usage: ffpreview.py [-h] [-b] [-m] [-c F] [-g G] [-w N] [-o P] [-f] [-r] [-i]
                     [-n N] [-N F] [-s F] [-C S] [-S T] [-E T] [-v] [--version]
-                    [filename]
+                    [filename [filename ...]]
 
 Generate interactive video thumbnail preview.
 
@@ -48,6 +48,7 @@ positional arguments:
 optional arguments:
   -h, --help          show this help message and exit
   -b, --batch         batch mode, do not draw window
+  -m, --manage        start with thumbnail manager
   -c F, --config F    read configuration from file F
   -g G, --grid G      set grid geometry in COLS[xROWS] format
   -w N, --width N     thumbnail image width in pixel
@@ -73,8 +74,9 @@ optional arguments:
 
 window controls:
   ESC, Ctrl+Q     quit application
-  Ctrl+G          adjust window geometry to optimal fit
+  Ctrl+G          adjust window geometry for optimal fit
   Ctrl+O          show open file dialog
+  Ctrl+M          open thumbnail manager
   Double-click    open video at clicked position in paused state
   Shift-click     play video starting at clicked position
   Mouse-2         open the context menu

@@ -19,7 +19,7 @@ if _PYTHON_VERSION < 3.6:
 
 import io
 import os
-from os.path import expanduser
+import shutil
 import signal
 import time
 import re
@@ -118,7 +118,8 @@ def configure():
         'start': '0',
         'end': '0',
         'verbosity': 0,
-        'batch': 0
+        'batch': 0,
+        'manage': 0,
     }
 
     # parse command line arguments
@@ -132,8 +133,9 @@ def configure():
                '  and end times match, and the index file appears to be healthy.\n'
                '\nwindow controls:\n'
                '  ESC, Ctrl+Q     quit application\n'
-               '  Ctrl+G          adjust window geometry to optimal fit\n'
+               '  Ctrl+G          adjust window geometry for optimal fit\n'
                '  Ctrl+O          show open file dialog\n'
+               '  Ctrl+M          open thumbnail manager\n'
                '  Double-click    open video at clicked position in paused state\n'
                '  Shift-click     play video starting at clicked position\n'
                '  Mouse-2         open the context menu\n'
@@ -146,6 +148,7 @@ def configure():
     )
     parser.add_argument('filename', nargs='*', default=os.getcwd(), help='input video file')
     parser.add_argument('-b', '--batch', action='count', help='batch mode, do not draw window')
+    parser.add_argument('-m', '--manage', action='count', help='start with thumbnail manager')
     parser.add_argument('-c', '--config', metavar='F', help='read configuration from file F')
     parser.add_argument('-g', '--grid', metavar='G', help='set grid geometry in COLS[xROWS] format')
     parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
@@ -234,6 +237,8 @@ def configure():
         cfg['verbosity'] = args.verbose
     if args.batch:
         cfg['batch'] = args.batch
+    if args.manage:
+        cfg['manage'] = args.manage
 
     # clear unused method parameters
     if cfg['method'] == 'scene':
@@ -264,9 +269,10 @@ def configure():
     if len(grid) > 1:
         cfg['grid_rows'] = int(grid[1])
 
-    # prepare temp directory
+    # prepare output directory
     if not cfg['outdir']:
         cfg['outdir'] = tempfile.gettempdir()
+    cfg['outdir'] = os.path.join(cfg['outdir'], 'ffpreview_thumbs')
     try:
         os.makedirs(cfg['outdir'], exist_ok=True)
     except Exception as e:
@@ -395,6 +401,7 @@ class tLabel(QWidget):
         menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
         menu.addSeparator()
         menu.addAction('Open Video File...', lambda: self.window().load_view(os.getcwd()))
+        menu.addAction('Open Thumbs Manager', lambda: self.window().manage_thumbs(cfg['outdir']))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
         menu.exec_(self.mapToGlobal(pos))
@@ -439,6 +446,7 @@ class tScrollArea(QScrollArea):
         menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
         menu.addSeparator()
         menu.addAction('Open Video File...', lambda: self.window().load_view(os.getcwd()))
+        menu.addAction('Open Thumbs Manager', lambda: self.window().manage_thumbs(cfg['outdir']))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
         menu.exec_(self.mapToGlobal(event.pos()))
@@ -570,6 +578,7 @@ class sMainWindow(QMainWindow):
         QShortcut('Ctrl+W', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+G', self).activated.connect(self.optimize_extent)
         QShortcut('Ctrl+O', self).activated.connect(lambda: self.load_view(os.getcwd()))
+        QShortcut('Ctrl+M', self).activated.connect(lambda: self.manage_thumbs(cfg['outdir']))
         QShortcut('Tab', self).activated.connect(lambda: self.advance_cursor(1))
         QShortcut('Shift+Tab', self).activated.connect(lambda: self.advance_cursor(-1))
         QShortcut('Right', self).activated.connect(lambda: self.advance_cursor(1))
@@ -606,7 +615,7 @@ class sMainWindow(QMainWindow):
         self.setWindowTitle('ffpreview - '+cfg['vid'])
 
         # prepare thumbnail directory
-        cfg['thdir'] = os.path.join(cfg['outdir'], 'ffpreview_thumbs', os.path.basename(cfg['vid']))
+        cfg['thdir'] = os.path.join(cfg['outdir'], os.path.basename(cfg['vid']))
         try:
             os.makedirs(cfg['thdir'], exist_ok=True)
         except Exception as e:
@@ -659,6 +668,81 @@ class sMainWindow(QMainWindow):
         self.calculate_props()
         self.setMinimumSize(self.tlwidth + self.px, self.tlheight + self.py)
         self.optimize_extent()
+
+    def manage_thumbs(self, outdir):
+        ilist = []
+        def refresh_list(lw, outdir):
+            ilist = get_indexfiles(outdir)
+            lw.clear()
+            for entry in ilist:
+                item = QListWidgetItem()
+                item.setText(entry['tdir'])
+                if not entry['idx'] or not entry['vfile']:
+                    item.setForeground(QColor('red'))
+                item.vfile = entry['vfile']
+                lw.addItem(item)
+
+        def remove(doit, dirs, lw, outdir):
+            if not doit:
+                return
+            for d in dirs:
+                rm = os.path.join(outdir, d)
+                eprint(1, "remove tree: ", rm)
+                shutil.rmtree(rm)
+                refresh_list(lw, outdir)
+
+        def remove_btn(lw, outdir):
+            dirs = [sel.text() for sel in lw.selectedItems()]
+            l = len(dirs)
+            if l < 1:
+                return
+            mbox = QMessageBox()
+            mbox.setIcon(QMessageBox.Warning)
+            mbox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            mbox.setDefaultButton(QMessageBox.Cancel)
+            mbox.buttonClicked.connect(lambda x: remove(x.text()=='OK', dirs, lw, outdir))
+            mbox.setWindowTitle('Remove Thumbnails')
+            mbox.setText('Confirm removal of %d folder%s.' % (l, 's' if l>1 else ''))
+            mbox.setInformativeText('Are you sure?')
+            mbox.exec_()
+
+        def load_thumbs(item):
+            if item.vfile:
+                eprint(0, "open ", item.vfile)
+                dlg.close()
+                self.load_view(item.vfile)
+
+        def load_thumbs_btn(lw):
+            for sel in lw.selectedItems():
+                load_thumbs(sel)
+                break
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Thumbnail Manager")
+        dlg.resize(600, 700)
+        dlg_layout = QVBoxLayout(dlg)
+        list_widget = QListWidget()
+        list_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        list_widget.itemDoubleClicked.connect(load_thumbs)
+        btn_layout = QHBoxLayout()
+        remove_button = QPushButton("Remove Selected")
+        remove_button.clicked.connect(lambda: remove_btn(list_widget, outdir))
+        refresh_button = QPushButton("Refresh")
+        refresh_button.clicked.connect(lambda: refresh_list(list_widget, outdir))
+        load_button = QPushButton("Load Thumbnails")
+        load_button.clicked.connect(lambda: load_thumbs_btn(list_widget))
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dlg.close)
+        btn_layout.addWidget(remove_button)
+        btn_layout.addWidget(refresh_button)
+        btn_layout.addWidget(load_button)
+        btn_layout.addWidget(close_button)
+        dlg_layout.addWidget(list_widget)
+        dlg_layout.addLayout(btn_layout)
+        refresh_list(list_widget, outdir)
+        dlg.exec_()
+
 
 ############################################################
 # Helper functions
@@ -900,7 +984,7 @@ def batch_process(fname):
     cfg['vid'] = os.path.basename(fname)
 
     # prepare thumbnail directory
-    cfg['thdir'] = os.path.join(cfg['outdir'], 'ffpreview_thumbs', os.path.basename(cfg['vid']))
+    cfg['thdir'] = os.path.join(cfg['outdir'], os.path.basename(cfg['vid']))
     try:
         os.makedirs(cfg['thdir'], exist_ok=True)
     except Exception as e:
@@ -909,6 +993,7 @@ def batch_process(fname):
     cfg['idxfile'] = os.path.join(cfg['thdir'], 'ffpreview.idx')
 
     # analyze video and prepare info and thumbnail files
+    olddir = None
     fdir = os.path.dirname(fname)
     if fdir:
         olddir = os.getcwd()
@@ -929,6 +1014,30 @@ def batch_process(fname):
     if olddir:
         os.chdir(olddir)
     return ok
+
+def get_indexfiles(path):
+    dirs = []
+    flist = []
+    for sd in os.listdir(path):
+        d = os.path.join(path, sd)
+        if not os.path.isdir(d):
+            continue
+        entry = { 'tdir': None, 'idx': False, 'vfile': None }
+        entry['tdir'] = sd
+        fidx = os.path.join(d, 'ffpreview.idx')
+        if os.path.isfile(fidx):
+            entry['idx'] = True
+            with open(fidx, 'r') as idxfile:
+                idx = json.load(idxfile)
+                if 'name' in idx:
+                    if 'path' in idx:
+                        opath = os.path.join(idx['path'], idx['name'])
+                        if os.path.isfile(opath):
+                            entry['vfile'] = opath
+        flist.append(entry)
+    flist = sorted(flist, key=lambda k: k['tdir'])
+    eprint(3, json.dumps(flist, indent=2))
+    return flist
 
 ############################################################
 # main function
@@ -956,16 +1065,20 @@ def main():
             errcnt += 1
         exit(errcnt)
 
-    if isinstance(cfg['vid'], list):
-        eprint(2, 'Only using first file in interactive mode.')
-        cfg['vid'] = cfg['vid'][0]
-
     os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
     app = QApplication(sys.argv)
     app.setApplicationName('ffpreview')
     root = sMainWindow(title='ffpreview')
     root.show()
-    root.load_view(cfg['vid'])
+
+    if cfg['manage']:
+        outdir = os.path.join(cfg['outdir'])
+        root.manage_thumbs(outdir)
+    else:
+        if isinstance(cfg['vid'], list):
+            eprint(2, 'Only using first file in interactive mode.')
+            cfg['vid'] = cfg['vid'][0]
+        root.load_view(cfg['vid'])
 
     # start main loop
     exit(app.exec_())

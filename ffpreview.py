@@ -93,6 +93,7 @@ def sig_handler(signum, frame):
 
 def configure():
     # set defaults
+    global cfg
     cfg = {
         'conffile': 'ffpreview.conf',
         'vid': '',

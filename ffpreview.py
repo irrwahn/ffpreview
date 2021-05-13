@@ -947,12 +947,14 @@ def main():
     signal.signal(signal.SIGPIPE, signal.SIG_IGN)
 
     if cfg['batch']:
+        errcnt = 0
         if isinstance(cfg['vid'], list):
             for fn in cfg['vid']:
-                ok = batch_process(fn)
-        else:
-            ok = batch_process(cfg['vid'])
-        exit(0 if ok else 3)
+                if not batch_process(fn):
+                    errcnt += 1
+        elif not batch_process(cfg['vid']):
+            errcnt += 1
+        exit(errcnt)
 
     if isinstance(cfg['vid'], list):
         eprint(0, 'Only using first file in interactive mode.')

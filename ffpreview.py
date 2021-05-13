@@ -689,7 +689,7 @@ class sMainWindow(QMainWindow):
                 rm = os.path.join(outdir, d)
                 eprint(1, "remove tree: ", rm)
                 shutil.rmtree(rm)
-                refresh_list(lw, outdir)
+            refresh_list(lw, outdir)
 
         def remove_btn(lw, outdir):
             dirs = [sel.text() for sel in lw.selectedItems()]

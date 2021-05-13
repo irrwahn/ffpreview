@@ -386,9 +386,9 @@ class tLabel(QWidget):
                     lambda: self.window().clipboard.setText(self.info[2]))
         menu.addSeparator()
         menu.addAction('Copy Original Filename',
-                    lambda: self.window().clipboard.setText(os.getcwd()+'/'+cfg['vid']))
+                    lambda: self.window().clipboard.setText(os.path.join(os.getcwd(), cfg['vid'])))
         menu.addAction('Copy Thumb Filename',
-                    lambda: self.window().clipboard.setText(cfg['thdir'] + '/' + self.info[1]))
+                    lambda: self.window().clipboard.setText(os.path.join(cfg['thdir'], self.info[1])))
         menu.addAction('Copy Thumbnail Image',
                     lambda: self.window().clipboard.setPixmap(self.layout().itemAt(0).widget().pixmap()))
         menu.addSeparator()
@@ -434,7 +434,7 @@ class tScrollArea(QScrollArea):
                     lambda: play_video(cfg['vid']))
         menu.addSeparator()
         menu.addAction('Copy Original Filename',
-                    lambda: self.window().clipboard.setText(os.getcwd()+'/'+cfg['vid']))
+                    lambda: self.window().clipboard.setText(os.path.join(os.getcwd(), cfg['vid'])))
         menu.addSeparator()
         menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
         menu.addSeparator()
@@ -606,13 +606,13 @@ class sMainWindow(QMainWindow):
         self.setWindowTitle('ffpreview - '+cfg['vid'])
 
         # prepare thumbnail directory
-        cfg['thdir'] = cfg['outdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'])
+        cfg['thdir'] = os.path.join(cfg['outdir'], 'ffpreview_thumbs', os.path.basename(cfg['vid']))
         try:
             os.makedirs(cfg['thdir'], exist_ok=True)
         except Exception as e:
             eprint(0, str(e))
             exit(1)
-        cfg['idxfile'] = cfg['thdir'] + '/ffpreview.idx'
+        cfg['idxfile'] = os.path.join(cfg['thdir'], 'ffpreview.idx')
 
         # clear previous view
         self.statdsp[0].setText('Clearing view ...')
@@ -692,7 +692,7 @@ def get_meta(vidfile):
     # ffprobe didn't cut it, try ffmpeg instead
     try:
         cmd = cfg['ffmpeg'] + ' -nostats -i "' + vidfile + '"'
-        cmd += ' -c:v copy -f rawvideo -y /dev/null'
+        cmd += ' -c:v copy -f rawvideo -y ' + os.devnull
         eprint(2, cmd)
         proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
         stdout, stderr = proc.communicate()
@@ -737,7 +737,7 @@ def make_thumbs(vidfile, thinfo, ilabel=None, pbar=None):
     else: # iframe
         cmd += ' -vf "select=eq(pict_type\,I)'
     cmd += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1"'
-    cmd += ' -vsync vfr "' + cfg['thdir'] + '/' + pictemplate + '"'
+    cmd += ' -vsync vfr "' + os.path.join(cfg['thdir'], pictemplate) + '"'
     eprint(2, cmd)
     ebuf = ''
     cnt = 0
@@ -760,11 +760,11 @@ def make_thumbs(vidfile, thinfo, ilabel=None, pbar=None):
                         pbar.setValue(float(t) * 100 / thinfo['duration'])
                         QApplication.processEvents()
                     else:
-                        eprint(1, '%s / %d s\r' % (t.split('.')[0], thinfo['duration']), end='')
+                        print('\r%s / %d s ' % (t.split('.')[0], thinfo['duration']), end='', file=sys.stderr)
         retval = proc.wait()
         proc = None
         if not ilabel or not pbar:
-            eprint(1, '                                  \r', end='')
+            print('\r                                  \r', end='', file=sys.stderr)
         if retval != 0:
             eprint(0, cmd + '\n  returned %d' % retval)
             eprint(1, ebuf)
@@ -857,7 +857,7 @@ def clear_thumbdir():
     for f in os.listdir(cfg['thdir']):
         if re.match('^\d{8}\.png$', f):
             try:
-                os.unlink(cfg['thdir'] + '/' + f)
+                os.unlink(os.path.join(cfg['thdir'], f))
             except Exception as e:
                 pass
 
@@ -873,7 +873,7 @@ def make_tlabels(tlabels, ilabel, pbar, dummy_img):
                     ilabel.setText('%d / %d' % (th[0], idx['count']))
                     pbar.setValue(th[0] * 100 / idx['count'])
                     QApplication.processEvents()
-                thumb = QPixmap(cfg['thdir'] + '/' + th[1])
+                thumb = QPixmap(os.path.join(cfg['thdir'], th[1]))
                 if thumb.isNull():
                     thumb = dummy_img.scaledToWidth(cfg['thumb_width'])
                 tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]), info=th)
@@ -900,13 +900,13 @@ def batch_process(fname):
     cfg['vid'] = os.path.basename(fname)
 
     # prepare thumbnail directory
-    cfg['thdir'] = cfg['outdir'] + '/ffpreview_thumbs/' + os.path.basename(cfg['vid'])
+    cfg['thdir'] = os.path.join(cfg['outdir'], 'ffpreview_thumbs', os.path.basename(cfg['vid']))
     try:
         os.makedirs(cfg['thdir'], exist_ok=True)
     except Exception as e:
         eprint(0, str(e))
         return False
-    cfg['idxfile'] = cfg['thdir'] + '/ffpreview.idx'
+    cfg['idxfile'] = os.path.join(cfg['thdir'], 'ffpreview.idx')
 
     # analyze video and prepare info and thumbnail files
     fdir = os.path.dirname(fname)
@@ -957,7 +957,7 @@ def main():
         exit(errcnt)
 
     if isinstance(cfg['vid'], list):
-        eprint(0, 'Only using first file in interactive mode.')
+        eprint(2, 'Only using first file in interactive mode.')
         cfg['vid'] = cfg['vid'][0]
 
     os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'

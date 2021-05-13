@@ -426,7 +426,7 @@ class tScrollArea(QScrollArea):
         if tlwidth < 1 or tlheight < 1:
             return
         rows = int(self.viewport().height() / tlheight + 0.5)
-        self.verticalScrollBar().setPageStep(rows * tlheight)
+        self.verticalScrollBar().setPageStep(tlheight)
         self.verticalScrollBar().setSingleStep(tlheight)
         cfg['grid_rows'] = rows
         cols = int((self.viewport().width()) / tlwidth)

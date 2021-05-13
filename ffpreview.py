@@ -996,19 +996,19 @@ def batch_process(fname):
     if fdir:
         olddir = os.getcwd()
         os.chdir(fdir)
-    eprint(0, 'Analyzing  %s ...\r' % cfg['vid'], end='')
+    print('Analyzing  %s ...\r' % cfg['vid'], end='', file=sys.stderr)
     thinfo, ok = get_thinfo()
     if not ok:
         # (re)generate thumbnails and index file
-        eprint(0, 'Processing')
+        print('Processing', file=sys.stderr)
         clear_thumbdir()
         thinfo, ok = make_thumbs(cfg['vid'], thinfo)
     else:
-        eprint(0, '')
+        print('', file=sys.stderr)
     if ok:
-        eprint(0, 'Ok.')
+        print('Ok.', file=sys.stderr)
     else:
-        eprint(0, 'Failed.')
+        print('Failed.', file=sys.stderr)
     if olddir:
         os.chdir(olddir)
     return ok

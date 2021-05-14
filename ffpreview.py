@@ -1007,6 +1007,7 @@ def batch_process(fname):
         print('Failed.    ', file=sys.stderr)
     return ok
 
+# get list of all index files for thumbnail manager
 def get_indexfiles(path):
     dirs = []
     flist = []

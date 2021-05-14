@@ -19,6 +19,7 @@ _PYTHON_VERSION = float("%d.%d" % (sys.version_info.major, sys.version_info.mino
 if _PYTHON_VERSION < 3.6:
     raise Exception ('Need Python version 3.6 or later, got version ' + str(sys.version))
 
+import platform
 import io
 import os
 import shutil
@@ -124,7 +125,13 @@ def configure():
         'verbosity': 0,
         'batch': 0,
         'manage': 0,
+        'platform': platform.system(),
+        'env': os.environ.copy(),
+        'exec': 'exec',
     }
+    if cfg['platform'] == 'Windows':
+        cfg['env']['PATH'] = sys.path[0] + os.pathsep + cfg['env']['PATH']
+        cfg['exec'] = ''
 
     # parse command line arguments
     parser = argparse.ArgumentParser(
@@ -171,7 +178,8 @@ def configure():
     args = parser.parse_args()
 
     if args.version:
-        print('ffpreview version %s running on python %.1f.x' % (_FFPREVIEW_VERSION, _PYTHON_VERSION))
+        print('ffpreview version %s running on python %.1f.x (%s)'
+                % (_FFPREVIEW_VERSION, _PYTHON_VERSION, cfg['platform']))
         exit(0)
 
     # parse config file
@@ -742,7 +750,7 @@ def get_meta(vidfile):
         cmd += ' -show_entries format=duration:stream=nb_read_packets'
         cmd += ' "' + vidfile + '"'
         eprint(2, cmd)
-        proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
+        proc = Popen(cfg['exec'] + ' ' + cmd, shell=True, stdout=PIPE, stderr=PIPE, env=cfg['env'])
         stdout, stderr = proc.communicate()
         retval = proc.wait()
         proc = None
@@ -763,7 +771,7 @@ def get_meta(vidfile):
         cmd = cfg['ffmpeg'] + ' -nostats -i "' + vidfile + '"'
         cmd += ' -c:v copy -f rawvideo -y ' + os.devnull
         eprint(2, cmd)
-        proc = Popen('exec ' + cmd, shell=True, stdout=PIPE, stderr=PIPE)
+        proc = Popen(cfg['exec'] + ' ' + cmd, shell=True, stdout=PIPE, stderr=PIPE, env=cfg['env'])
         stdout, stderr = proc.communicate()
         retval = proc.wait()
         proc = None
@@ -811,7 +819,7 @@ def make_thumbs(vidfile, thinfo, thdir, ilabel=None, pbar=None):
     ebuf = ''
     cnt = 0
     try:
-        proc = Popen('exec ' + cmd, shell=True, stderr=PIPE)
+        proc = Popen(cfg['exec'] + ' ' + cmd, shell=True, stderr=PIPE, env=cfg['env'])
         while proc.poll() is None:
             line = proc.stderr.readline()
             if line:
@@ -854,7 +862,8 @@ def play_video(filename, start='0', paused=False):
     cmd = cmd.replace('%t', '"' + start + '"')
     cmd = cmd.replace('%f', '"' + filename + '"')
     eprint(2, cmd)
-    Popen('exec ' + cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
+    Popen(cfg['exec'] + ' ' + cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL,
+            env=cfg['env'], start_new_session=True)
 
 # check validity of existing index file
 def chk_idxfile(thinfo, thdir):
@@ -1032,11 +1041,12 @@ def main():
     cfg = configure()
     eprint(3, 'cfg = ' + json.dumps(cfg, indent=2))
 
-    signal.signal(signal.SIGHUP, sig_handler)
     signal.signal(signal.SIGINT, sig_handler)
-    signal.signal(signal.SIGQUIT, sig_handler)
     signal.signal(signal.SIGTERM, sig_handler)
-    signal.signal(signal.SIGPIPE, signal.SIG_IGN)
+    if cfg['platform'] != 'Windows':
+        signal.signal(signal.SIGHUP, sig_handler)
+        signal.signal(signal.SIGQUIT, sig_handler)
+        signal.signal(signal.SIGPIPE, signal.SIG_IGN)
 
     if cfg['batch']:
         errcnt = 0

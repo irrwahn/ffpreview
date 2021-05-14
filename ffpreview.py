@@ -55,7 +55,10 @@ def s2hms(ts):
     s, ms = divmod(float(ts), 1.0)
     m, s = divmod(s, 60)
     h, m = divmod(m, 60)
-    res = '%d:%02d:%02d%s' % (h, m, s, ('%.3f' % ms).lstrip('0'))
+    if h > 0:
+        res = '%02d:%02d:%02d%s' % (h, m, s, ('%.3f' % ms).lstrip('0'))
+    else:
+        res = '%02d:%02d%s' % (m, s, ('%.3f' % ms).lstrip('0'))
     return res
 
 def str2bool(s):
@@ -511,14 +514,13 @@ class sMainWindow(QMainWindow):
         if idx is None:
             idx = self.cur
         l[self.cur].setStyleSheet('QLabel {}')
-        #self.statdsp[3].setText('')
         if idx < 0:
             idx = 0
         elif idx >= len(l):
             idx = len(l) - 1
         self.cur = idx
         l[self.cur].setStyleSheet('QLabel {background-color: %s;}' % cfg['highlightcolor'])
-        self.statdsp[3].setText(l[self.cur].info[1])
+        self.statdsp[3].setText('%d / %d' % (l[self.cur].info[0], self.thinfo['count']))
         self.scroll.ensureWidgetVisible(l[self.cur], 0, 0)
 
     def set_cursorw(self, label):
@@ -541,6 +543,7 @@ class sMainWindow(QMainWindow):
         for i in range(4):
             s = QLabel('')
             s.resize(100, 20)
+            s.setStyleSheet("QLabel {margin: 0px 2px 0px 2px;}");
             self.statdsp.append(s)
             self.statbar.addWidget(s)
         self.progbar = QProgressBar()
@@ -607,11 +610,11 @@ class sMainWindow(QMainWindow):
         cfg['idxfile'] = os.path.join(cfg['thdir'], 'ffpreview.idx')
         self.setWindowTitle('ffpreview - ' + cfg['vid'])
         # clear previous view
-        self.statdsp[0].setText('Clearing view ...')
+        self.statdsp[0].setText('Clearing view')
         QApplication.processEvents()
         self.clear_grid()
         # analyze video
-        self.statdsp[0].setText('Analyzing ...')
+        self.statdsp[0].setText('Analyzing')
         QApplication.processEvents()
         thinfo, ok = get_thinfo(fname)
         if thinfo is None:
@@ -630,7 +633,7 @@ class sMainWindow(QMainWindow):
             self.progbar.show()
             thinfo, ok = make_thumbs(fname, thinfo, self.statdsp[1], self.progbar)
         # load thumbnails and make labels
-        self.statdsp[0].setText('Loading:')
+        self.statdsp[0].setText('Loading ')
         self.progbar.show()
         tlabels = make_tlabels(self.tlabels, self.statdsp[1], self.progbar, self.broken_img)
         # roughly fix window geometry
@@ -640,7 +643,7 @@ class sMainWindow(QMainWindow):
         h = self.tlheight * cfg['grid_rows'] + self.py
         self.resize(w, h)
         # fill the view grid
-        self.statdsp[0].setText(' Generating view ...')
+        self.statdsp[0].setText('Building view')
         self.statdsp[1].setText('')
         self.statdsp[2].setText('')
         QApplication.processEvents()
@@ -648,9 +651,8 @@ class sMainWindow(QMainWindow):
         self.progbar.hide()
         QApplication.processEvents()
         # final window touch-up
-        self.statdsp[0].setText(' Duration: ' + str(thinfo["duration"]) + ' s')
-        self.statdsp[1].setText(' Thumbs: ' + str(thinfo["count"]))
-        self.statdsp[2].setText(' Method: ' + str(thinfo["method"]))
+        self.statdsp[0].setText(s2hms(self.thinfo["duration"]))
+        self.statdsp[1].setText(str(self.thinfo["method"]))
         QApplication.processEvents()
         self.calculate_props()
         self.setMinimumSize(self.tlwidth + self.px, self.tlheight + self.py)
@@ -750,7 +752,7 @@ def get_meta(vidfile):
             info = json.loads(stdout.decode())
             meta['frames'] = int(info['streams'][0]['nb_read_packets'])
             d = float(info['format']['duration'])
-            meta['duration'] = int(d)
+            meta['duration'] = d
             meta['fps'] = round(meta['frames'] / d, 2)
             return meta, True
         else:
@@ -863,7 +865,7 @@ def chk_idxfile(thinfo):
             idx = json.load(idxfile)
             if idx['name'] != thinfo['name']:
                 return False
-            if idx['duration'] != thinfo['duration']:
+            if int(idx['duration']) != int(thinfo['duration']):
                 return False
             if idx['start'] != thinfo['start']:
                 return False

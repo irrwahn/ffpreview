@@ -11,6 +11,8 @@ See `LICENSE` file for more information.
 
 _FFPREVIEW_VERSION = '0.2+'
 
+_FFPREVIEW_IDX = 'ffpreview.idx'
+
 import sys
 
 _PYTHON_VERSION = float("%d.%d" % (sys.version_info.major, sys.version_info.minor))
@@ -100,10 +102,7 @@ def configure():
     cfg = {
         'conffile': 'ffpreview.conf',
         'vid': '',
-        'path': '',
         'outdir': '',
-        'thdir': '',
-        'idxfile': '',
         'grid': '5x5',
         'grid_columns': 5,
         'grid_rows': 5,
@@ -151,7 +150,7 @@ def configure():
                '  Shift+Enter     play video starting at selected position\n'
                '  Alt+Enter       open the context menu\n'
     )
-    parser.add_argument('filename', nargs='*', default=os.getcwd(), help='input video file')
+    parser.add_argument('filename', nargs='*', default=[os.getcwd()], help='input video file')
     parser.add_argument('-b', '--batch', action='count', help='batch mode, do not draw window')
     parser.add_argument('-m', '--manage', action='count', help='start with thumbnail manager')
     parser.add_argument('-c', '--config', metavar='F', help='read configuration from file F')
@@ -365,10 +364,10 @@ class tLabel(QWidget):
     def mouseReleaseEvent(self, event):
         self.window().set_cursorw(self)
         if QApplication.keyboardModifiers() == Qt.ShiftModifier:
-            play_video(cfg['vid'], self.info[2])
+            play_video(self.window().fname, self.info[2])
 
     def mouseDoubleClickEvent(self, event):
-        play_video(os.path.join(cfg['path'], cfg['vid']), self.info[2], True)
+        play_video(self.window().fname, self.info[2], True)
 
     def contextMenuEvent(self, event):
         self.window().set_cursorw(self)
@@ -377,9 +376,9 @@ class tLabel(QWidget):
     def contextMenu_show(self, pos):
         menu = QMenu(self)
         menu.addAction('Play From Here',
-                    lambda: play_video(os.path.join(cfg['path'], cfg['vid']), self.info[2]))
+                    lambda: play_video(self.window().fname, self.info[2]))
         menu.addAction('Play From Start',
-                    lambda: play_video(os.path.join(cfg['path'], cfg['vid'])))
+                    lambda: play_video(self.window().fname))
         menu.addSeparator()
         menu.addAction('Copy Timestamp [H:M:S.ms]',
                     lambda: self.window().clipboard.setText(s2hms(self.info[2])))
@@ -387,15 +386,15 @@ class tLabel(QWidget):
                     lambda: self.window().clipboard.setText(self.info[2]))
         menu.addSeparator()
         menu.addAction('Copy Original Filename',
-                    lambda: self.window().clipboard.setText(os.path.join(cfg['path'], cfg['vid'])))
+                    lambda: self.window().clipboard.setText(self.window().fname))
         menu.addAction('Copy Thumb Filename',
-                    lambda: self.window().clipboard.setText(os.path.join(cfg['thdir'], self.info[1])))
+                    lambda: self.window().clipboard.setText(os.path.join(self.window().thdir, self.info[1])))
         menu.addAction('Copy Thumbnail Image',
                     lambda: self.window().clipboard.setPixmap(self.layout().itemAt(0).widget().pixmap()))
         menu.addSeparator()
         menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
         menu.addSeparator()
-        menu.addAction('Open Video File...', lambda: self.window().load_view(cfg['path']))
+        menu.addAction('Open Video File...', lambda: self.window().load_view(self.window().vpath))
         menu.addAction('Open Thumbs Manager', lambda: self.window().manage_thumbs(cfg['outdir']))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
@@ -432,14 +431,14 @@ class tScrollArea(QScrollArea):
     def contextMenuEvent(self, event):
         menu = QMenu(self)
         menu.addAction('Play From Start',
-                    lambda: play_video(cfg['vid']))
+                    lambda: play_video(self.window().fname))
         menu.addSeparator()
         menu.addAction('Copy Original Filename',
-                    lambda: self.window().clipboard.setText(os.path.join(cfg['path'], cfg['vid'])))
+                    lambda: self.window().clipboard.setText(self.window().fname))
         menu.addSeparator()
         menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
         menu.addSeparator()
-        menu.addAction('Open Video File...', lambda: self.window().load_view(cfg['path']))
+        menu.addAction('Open Video File...', lambda: self.window().load_view(self.window().vpath))
         menu.addAction('Open Thumbs Manager', lambda: self.window().manage_thumbs(cfg['outdir']))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
@@ -454,6 +453,11 @@ class sMainWindow(QMainWindow):
     tlwidth = 0
     tlheight = 0
     tlabels = []
+    thinfo = None
+    fname = None
+    vfile = None
+    vpath = None
+    thdir = None
     cur = 0
 
     def __new__(cls, *args, title='', **kwargs):
@@ -573,7 +577,7 @@ class sMainWindow(QMainWindow):
         QShortcut('Ctrl+Q', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+W', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+G', self).activated.connect(self.optimize_extent)
-        QShortcut('Ctrl+O', self).activated.connect(lambda: self.load_view(cfg['path']))
+        QShortcut('Ctrl+O', self).activated.connect(lambda: self.load_view(self.thinfo['path']))
         QShortcut('Ctrl+M', self).activated.connect(lambda: self.manage_thumbs(cfg['outdir']))
         QShortcut('Tab', self).activated.connect(lambda: self.advance_cursor(1))
         QShortcut('Shift+Tab', self).activated.connect(lambda: self.advance_cursor(-1))
@@ -585,8 +589,8 @@ class sMainWindow(QMainWindow):
         QShortcut('PgDown', self).activated.connect(lambda: self.advance_cursor(cfg['grid_rows'] * cfg['grid_columns']))
         QShortcut('Home', self).activated.connect(lambda: self.set_cursor(0))
         QShortcut('End', self).activated.connect(lambda: self.set_cursor(len(self.tlabels)-1))
-        QShortcut('Return', self).activated.connect(lambda: play_video(cfg['vid'], self.tlabels[self.cur].info[2], True))
-        QShortcut('Shift+Return', self).activated.connect(lambda: play_video(cfg['vid'], self.tlabels[self.cur].info[2]))
+        QShortcut('Return', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2], True))
+        QShortcut('Shift+Return', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2]))
         QShortcut('Alt+Return', self).activated.connect(
                     lambda: self.tlabels[self.cur].contextMenu_show(QPoint(self.tlwidth/2, self.tlheight/2)))
         self.set_cursor(0)
@@ -604,11 +608,11 @@ class sMainWindow(QMainWindow):
                         'Video Files (*.avi *.mkv *.mp4);;All Files (*)', options=options)
         if not os.path.exists(fname) or not os.access(fname, os.R_OK):
             return
-        cfg['vid'] = os.path.basename(fname)
-        cfg['path'] = os.path.dirname(os.path.abspath(fname))
-        cfg['thdir'] = os.path.join(cfg['outdir'], os.path.basename(cfg['vid']))
-        cfg['idxfile'] = os.path.join(cfg['thdir'], 'ffpreview.idx')
-        self.setWindowTitle('ffpreview - ' + cfg['vid'])
+        self.fname = os.path.abspath(fname)
+        self.vfile = os.path.basename(self.fname)
+        self.vpath = os.path.dirname(self.fname)
+        self.thdir = os.path.join(cfg['outdir'], self.vfile)
+        self.setWindowTitle('ffpreview - ' + self.vfile)
         # clear previous view
         self.statdsp[0].setText('Clearing view')
         QApplication.processEvents()
@@ -616,29 +620,23 @@ class sMainWindow(QMainWindow):
         # analyze video
         self.statdsp[0].setText('Analyzing')
         QApplication.processEvents()
-        thinfo, ok = get_thinfo(fname)
-        if thinfo is None:
+        self.thinfo, ok = get_thinfo(fname, self.thdir)
+        if self.thinfo is None:
             self.statdsp[0].setText('Unrecognized file format')
             return
         if not ok:
-            # prepare thumbnail directory
-            try:
-                os.makedirs(cfg['thdir'], exist_ok=True)
-            except Exception as e:
-                eprint(0, str(e))
-                return False
             # (re)generate thumbnails and index file
-            self.statdsp[0].setText('Processing video:')
-            clear_thumbdir()
+            self.statdsp[0].setText('Processing')
+            clear_thumbdir(self.thdir)
             self.progbar.show()
-            thinfo, ok = make_thumbs(fname, thinfo, self.statdsp[1], self.progbar)
+            self.thinfo, ok = make_thumbs(fname, self.thinfo, self.thdir, self.statdsp[1], self.progbar)
         # load thumbnails and make labels
         self.statdsp[0].setText('Loading ')
         self.progbar.show()
-        tlabels = make_tlabels(self.tlabels, self.statdsp[1], self.progbar, self.broken_img)
+        self.tlabels = make_tlabels(self.tlabels, self.thdir, self.statdsp[1], self.progbar, self.broken_img)
         # roughly fix window geometry
-        self.tlwidth = tlabels[0].width()
-        self.tlheight = tlabels[0].height()
+        self.tlwidth = self.tlabels[0].width()
+        self.tlheight = self.tlabels[0].height()
         w = self.tlwidth * cfg['grid_columns'] + self.px
         h = self.tlheight * cfg['grid_rows'] + self.py
         self.resize(w, h)
@@ -786,7 +784,7 @@ def get_meta(vidfile):
     return meta, False
 
 # extract thumbnails from video and collect timestamps
-def make_thumbs(vidfile, thinfo, ilabel=None, pbar=None):
+def make_thumbs(vidfile, thinfo, thdir, ilabel=None, pbar=None):
     global proc
     rc = False
     pictemplate = '%08d.png'
@@ -808,7 +806,7 @@ def make_thumbs(vidfile, thinfo, ilabel=None, pbar=None):
     else: # iframe
         cmd += ' -vf "select=eq(pict_type\,I)'
     cmd += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1"'
-    cmd += ' -vsync vfr "' + os.path.join(cfg['thdir'], pictemplate) + '"'
+    cmd += ' -vsync vfr "' + os.path.join(thdir, pictemplate) + '"'
     eprint(2, cmd)
     ebuf = ''
     cnt = 0
@@ -840,7 +838,7 @@ def make_thumbs(vidfile, thinfo, ilabel=None, pbar=None):
             eprint(0, cmd + '\n  returned %d' % retval)
             eprint(1, ebuf)
         thinfo['count'] = cnt
-        with open(cfg['idxfile'], 'w') as idxfile:
+        with open(os.path.join(thdir, _FFPREVIEW_IDX), 'w') as idxfile:
             json.dump(thinfo, idxfile, indent=2)
             rc = True
     except Exception as e:
@@ -859,9 +857,9 @@ def play_video(filename, start='0', paused=False):
     Popen('exec ' + cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
 
 # check validity of existing index file
-def chk_idxfile(thinfo):
+def chk_idxfile(thinfo, thdir):
     try:
-        with open(cfg['idxfile'], 'r') as idxfile:
+        with open(os.path.join(thdir, _FFPREVIEW_IDX), 'r') as idxfile:
             idx = json.load(idxfile)
             if idx['name'] != thinfo['name']:
                 return False
@@ -892,11 +890,10 @@ def chk_idxfile(thinfo):
     return False
 
 # initialize thumbnail info structure
-def get_thinfo(vidfile):
-    vidfile = os.path.abspath(vidfile)
+def get_thinfo(vfile, thdir):
     thinfo = {
-        'name': os.path.basename(vidfile),
-        'path': os.path.dirname(vidfile),
+        'name': os.path.basename(vfile),
+        'path': os.path.dirname(vfile),
         'frames': -1,
         'duration': -1,
         'fps': -1,
@@ -912,34 +909,40 @@ def get_thinfo(vidfile):
         'date': 0,
         'th': []
     }
-    meta, ok = get_meta(vidfile)
+    meta, ok = get_meta(vfile)
     if not ok:
         return None, False
     thinfo.update(meta)
     thinfo['date'] = int(time.time())
     if not cfg['force']:
-        chk = chk_idxfile(thinfo)
+        chk = chk_idxfile(thinfo, thdir)
         if chk:
             return chk, True
     return thinfo, False
 
 # clear out thumbnail directory
-def clear_thumbdir():
+def clear_thumbdir(thdir):
+    # prepare thumbnail directory
     try:
-        os.unlink(cfg['idxfile'])
+        os.makedirs(thdir, exist_ok=True)
+    except Exception as e:
+        eprint(0, str(e))
+        return False
+    try:
+        os.unlink(thinfo['idxfile'])
     except Exception as e:
         pass
-    for f in os.listdir(cfg['thdir']):
+    for f in os.listdir(thdir):
         if re.match('^\d{8}\.png$', f):
             try:
-                os.unlink(os.path.join(cfg['thdir'], f))
+                os.unlink(os.path.join(thdir, f))
             except Exception as e:
                 pass
 
 # generate clickable thumbnail labels
-def make_tlabels(tlabels, ilabel, pbar, dummy_img):
+def make_tlabels(tlabels, thdir, ilabel, pbar, dummy_img):
     try:
-        with open(cfg['idxfile'], 'r') as idxfile:
+        with open(os.path.join(thdir, _FFPREVIEW_IDX), 'r') as idxfile:
             idx = json.load(idxfile)
             if cfg['verbosity'] > 3:
                 eprint(3, 'idx = ' + json.dumps(idx, indent=2))
@@ -948,7 +951,7 @@ def make_tlabels(tlabels, ilabel, pbar, dummy_img):
                     ilabel.setText('%d / %d' % (th[0], idx['count']))
                     pbar.setValue(th[0] * 100 / idx['count'])
                     QApplication.processEvents()
-                thumb = QPixmap(os.path.join(cfg['thdir'], th[1]))
+                thumb = QPixmap(os.path.join(thdir, th[1]))
                 if thumb.isNull():
                     thumb = dummy_img.scaledToWidth(cfg['thumb_width'])
                 tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]), info=th)
@@ -972,28 +975,21 @@ def batch_process(fname):
     if os.path.isdir(fname):
         eprint(0, '%s is a directory!' % fname)
         return False
-    cfg['vid'] = os.path.basename(fname)
-    cfg['path'] = os.path.dirname(os.path.abspath(fname))
-    cfg['thdir'] = os.path.join(cfg['outdir'], cfg['vid'])
-    cfg['idxfile'] = os.path.join(cfg['thdir'], 'ffpreview.idx')
+    fname = os.path.abspath(fname)
+    vfile = os.path.basename(fname)
+    thdir = os.path.join(cfg['outdir'], vfile)
     # analyze video
-    print('Analyzing  %s ...\r' % cfg['vid'], end='', file=sys.stderr)
-    thinfo, ok = get_thinfo(fname)
+    print('Analyzing  %s ...\r' % vfile, end='', file=sys.stderr)
+    thinfo, ok = get_thinfo(fname, thdir)
     if thinfo is None:
         print('\nFailed.', file=sys.stderr)
         return False
     # prepare info and thumbnail files
     if not ok:
-        # prepare thumbnail directory
-        try:
-            os.makedirs(cfg['thdir'], exist_ok=True)
-        except Exception as e:
-            eprint(0, str(e))
-            return False
         # (re)generate thumbnails and index file
         print('Processing', file=sys.stderr)
-        clear_thumbdir()
-        thinfo, ok = make_thumbs(fname, thinfo)
+        clear_thumbdir(thdir)
+        thinfo, ok = make_thumbs(fname, thinfo, thdir)
     else:
         print('', file=sys.stderr)
     if ok:
@@ -1011,7 +1007,7 @@ def get_indexfiles(path):
             continue
         entry = { 'tdir': None, 'idx': False, 'vfile': None }
         entry['tdir'] = sd
-        fidx = os.path.join(d, 'ffpreview.idx')
+        fidx = os.path.join(d, _FFPREVIEW_IDX)
         if os.path.isfile(fidx):
             entry['idx'] = True
             with open(fidx, 'r') as idxfile:
@@ -1044,12 +1040,9 @@ def main():
 
     if cfg['batch']:
         errcnt = 0
-        if isinstance(cfg['vid'], list):
-            for fn in cfg['vid']:
-                if not batch_process(fn):
-                    errcnt += 1
-        elif not batch_process(cfg['vid']):
-            errcnt += 1
+        for fn in cfg['vid']:
+            if not batch_process(fn):
+                errcnt += 1
         exit(errcnt)
 
     os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
@@ -1059,13 +1052,9 @@ def main():
     root.show()
 
     if cfg['manage']:
-        outdir = os.path.join(cfg['outdir'])
-        root.manage_thumbs(outdir)
+        root.manage_thumbs(cfg['outdir'])
     else:
-        if isinstance(cfg['vid'], list):
-            eprint(2, 'Only using first file in interactive mode.')
-            cfg['vid'] = cfg['vid'][0]
-        root.load_view(cfg['vid'])
+        root.load_view(cfg['vid'][0])
 
     # start main loop
     exit(app.exec_())

@@ -144,6 +144,7 @@ def configure():
                '  and end times match, and the index file appears to be healthy.\n'
                '\nwindow controls:\n'
                '  ESC, Ctrl+Q     quit application\n'
+               '  Ctrl+F          toggle full screen view\n'
                '  Ctrl+G          adjust window geometry for optimal fit\n'
                '  Ctrl+O          show open file dialog\n'
                '  Ctrl+M          open thumbnail manager\n'
@@ -542,6 +543,16 @@ class sMainWindow(QMainWindow):
     def advance_cursor(self, amnt):
         self.set_cursor(self.cur + amnt)
 
+    def toggle_fullscreen(self):
+        if self.windowState() & Qt.WindowFullScreen:
+            self.showNormal()
+            for w in self.statdsp:
+                w.show()
+        else:
+            self.showFullScreen()
+            for w in self.statdsp:
+                w.hide()
+
     def init_window(self, title):
         self.setWindowTitle(title)
         self.broken_img = sQPixmap(imgdata=_broken_img_png)
@@ -584,6 +595,7 @@ class sMainWindow(QMainWindow):
         QShortcut('Esc', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+Q', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+W', self).activated.connect(lambda: die(0))
+        QShortcut('Ctrl+F', self).activated.connect(self.toggle_fullscreen)
         QShortcut('Ctrl+G', self).activated.connect(self.optimize_extent)
         QShortcut('Ctrl+O', self).activated.connect(lambda: self.load_view(self.thinfo['path']))
         QShortcut('Ctrl+M', self).activated.connect(lambda: self.manage_thumbs(cfg['outdir']))

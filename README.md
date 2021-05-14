@@ -74,6 +74,7 @@ optional arguments:
 
 window controls:
   ESC, Ctrl+Q     quit application
+  Ctrl+F          toggle full screen view
   Ctrl+G          adjust window geometry for optimal fit
   Ctrl+O          show open file dialog
   Ctrl+M          open thumbnail manager

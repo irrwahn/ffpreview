@@ -108,7 +108,8 @@ def configure():
         'grid_columns': 5,
         'grid_rows': 5,
         'thumb_width': '128',
-        'highlightcolor': 'lightblue',
+        'appstyle': '',
+        'selstyle': 'background-color: lightblue;',
         'ffprobe': 'ffprobe',
         'ffmpeg': 'ffmpeg',
         'player': 'mpv --no-ordered-chapters --start=%t %f',
@@ -532,7 +533,7 @@ class sMainWindow(QMainWindow):
         elif idx >= len(l):
             idx = len(l) - 1
         self.cur = idx
-        l[self.cur].setStyleSheet('QLabel {background-color: %s;}' % cfg['highlightcolor'])
+        l[self.cur].setStyleSheet( 'QLabel {' + cfg['selstyle'] + '}' )
         self.statdsp[3].setText('%d / %d' % (l[self.cur].info[0], self.thinfo['count']))
         self.scroll.ensureWidgetVisible(l[self.cur], 0, 0)
 
@@ -560,6 +561,7 @@ class sMainWindow(QMainWindow):
         self.setWindowIcon(self.ffpreview_ico)
         self.clipboard = QApplication.clipboard()
         self.resize(500, 300)
+        self.setStyleSheet(cfg['appstyle'])
 
         self.statbar = QHBoxLayout()
         self.statdsp = []

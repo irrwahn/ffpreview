@@ -14,12 +14,13 @@ grid=5x5
 
 # Application and selected thumbnail style in CSS syntax.
 # Examples:
-# default theme
-#  appstyle=
-#  selstyle=background-color: lightblue;
-# dark theme
-#  appstyle=background-color: #181818; color: #a0a0a0;
-#  selstyle=background-color: #b0b0b0; color: #202020;
+# Standard theme example:
+#   appstyle=
+#   selstyle=background-color: lightblue;
+# Dark theme example:
+#   appstyle= * {background-color: #181818; color: #b0b0b0;}
+#     :selected {background-color: #4a90d9; color: #f4f8fd;}
+#   selstyle= background-color: #4a90d9; color: #f4f8fd;
 appstyle=
 selstyle=background-color: lightblue;
 

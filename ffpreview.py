@@ -554,6 +554,14 @@ class sMainWindow(QMainWindow):
             for w in self.statdsp:
                 w.hide()
 
+    def esc_action(self):
+        if self.windowState() & Qt.WindowFullScreen:
+            self.showNormal()
+            for w in self.statdsp:
+                w.show()
+        else:
+            die(0)
+
     def init_window(self, title):
         self.setWindowTitle(title)
         self.broken_img = sQPixmap(imgdata=_broken_img_png)
@@ -594,7 +602,7 @@ class sMainWindow(QMainWindow):
         self.main_layout.addLayout(self.statbar)
         self.setCentralWidget(self.main_frame)
 
-        QShortcut('Esc', self).activated.connect(lambda: die(0))
+        QShortcut('Esc', self).activated.connect(self.esc_action)
         QShortcut('Ctrl+Q', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+W', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+F', self).activated.connect(self.toggle_fullscreen)
@@ -714,7 +722,7 @@ class sMainWindow(QMainWindow):
 
         def load_thumbs(item):
             if item.vfile:
-                eprint(0, "open ", item.vfile)
+                eprint(1, "open ", item.vfile)
                 dlg.close()
                 self.load_view(item.vfile)
 
@@ -738,9 +746,9 @@ class sMainWindow(QMainWindow):
         refresh_button.clicked.connect(lambda: refresh_list(list_widget, outdir))
         load_button = QPushButton("Load Thumbnails")
         load_button.clicked.connect(lambda: load_thumbs_btn(list_widget))
+        load_button.setDefault(True)
         close_button = QPushButton("Close")
         close_button.clicked.connect(dlg.close)
-        close_button.setDefault(True)
         btn_layout.addWidget(load_button)
         btn_layout.addWidget(refresh_button)
         btn_layout.addWidget(remove_button)
@@ -848,7 +856,8 @@ def make_thumbs(vidfile, thinfo, thdir, ilabel=None, pbar=None):
                     thinfo['th'].append([ cnt, pictemplate % cnt, t ])
                     if ilabel and pbar:
                         ilabel.setText('%s / %d s' % (t.split('.')[0], thinfo['duration']))
-                        pbar.setValue(float(t) * 100 / thinfo['duration'])
+                        if thinfo['duration']:
+                            pbar.setValue(float(t) * 100 / thinfo['duration'])
                         QApplication.processEvents()
                     else:
                         print('\r%s / %d s ' % (t.split('.')[0], thinfo['duration']), end='', file=sys.stderr)

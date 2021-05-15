@@ -81,7 +81,7 @@ window controls:
   Ctrl+M            open thumbnail manager
   Double-click,
   Return, Space     open video at selected position in paused state
-  Shift-click,
+  Shift+dbl-click,
   Shift+Return      play video starting at selected position
   Mouse-2, Menu,
   Alt+Return        open the context menu

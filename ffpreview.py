@@ -152,7 +152,7 @@ def configure():
                '  Ctrl+M            open thumbnail manager\n'
                '  Double-click,\n'
                '  Return, Space     open video at selected position in paused state\n'
-               '  Shift-click,\n'
+               '  Shift+dbl-click,\n'
                '  Shift+Return      play video starting at selected position\n'
                '  Mouse-2, Menu,\n'
                '  Alt+Return        open the context menu\n'
@@ -351,8 +351,10 @@ class sQIcon(QIcon):
             super().addPixmap(sQPixmap(imgdata=imgdata))
 
 class tLabel(QWidget):
-    __slots__ = ['info', 'master']
-    def __init__(self, *args, pixmap=None, text=None, info=None, **kwargs):
+    __slots__ = ['info', 'meta']
+    notify = pyqtSignal(dict)
+
+    def __init__(self, *args, pixmap=None, text=None, info=None, meta=None, receptor=None, **kwargs):
         super().__init__(*args, **kwargs)
         layout = QVBoxLayout(self)
         layout.setSpacing(0)
@@ -369,49 +371,50 @@ class tLabel(QWidget):
             tl.setAlignment(Qt.AlignCenter)
             layout.addWidget(tl)
         self.info = info
+        self.meta = meta
+        self.notify.connect(receptor)
         self.focus = False
         self.adjustSize()
         self.setMaximumSize(self.width(), self.height())
 
     def mouseReleaseEvent(self, event):
-        self.master.set_cursorw(self)
-        if QApplication.keyboardModifiers() == Qt.ShiftModifier:
-            play_video(self.master.fname, self.info[2])
+        self.notify.emit({'type': 'set_cursorw', 'id': self})
 
     def mouseDoubleClickEvent(self, event):
-        play_video(self.master.fname, self.info[2], True)
+        self.notify.emit({'type': 'play_video', 'ts': self.info[2],
+                    'pause': not (QApplication.keyboardModifiers() & Qt.ShiftModifier)})
 
     def contextMenuEvent(self, event):
-        self.master.set_cursorw(self)
-        self.contextMenu_show(event.pos())
+        self.notify.emit({'type': 'set_cursorw', 'id': self})
+        self.contextmenu_show(event.pos())
 
-    def contextMenu_show(self, pos):
+    def contextmenu_show(self, pos):
         clipboard = QApplication.clipboard()
         menu = QMenu(self)
-        menu.addAction('Play From Here', lambda: play_video(self.master.fname, self.info[2]))
-        menu.addAction('Play From Start', lambda: play_video(self.master.fname))
+        menu.addAction('Play From Here', lambda: self.notify.emit({'type':'play_video', 'ts':self.info[2], 'pause':False}))
+        menu.addAction('Play From Start', lambda: self.notify.emit({'type':'play_video', 'ts':'0', 'pause':False}))
         menu.addSeparator()
         menu.addAction('Copy Timestamp [H:M:S.ms]', lambda: clipboard.setText(s2hms(self.info[2])))
         menu.addAction('Copy Timestamp [S.ms]', lambda: clipboard.setText(self.info[2]))
         menu.addSeparator()
-        menu.addAction('Copy Original Filename', lambda: clipboard.setText(self.master.fname))
-        menu.addAction('Copy Thumb Filename', lambda: clipboard.setText(os.path.join(self.master.thdir, self.info[1])))
+        menu.addAction('Copy Original Filename', lambda: clipboard.setText(self.meta['fname']))
+        menu.addAction('Copy Thumb Filename', lambda: clipboard.setText(os.path.join(self.meta['thdir'], self.info[1])))
         menu.addAction('Copy Thumbnail Image', lambda: clipboard.setPixmap(self.layout().itemAt(0).widget().pixmap()))
         menu.addSeparator()
-        menu.addAction('Optimize Window Extent', lambda: self.master.optimize_extent())
+        menu.addAction('Optimize Window Extent', lambda: self.notify.emit({'type': 'optimize_extent'}))
         menu.addSeparator()
-        menu.addAction('Open Video File...', lambda: self.master.load_view(self.master.vpath))
-        menu.addAction('Open Thumbs Manager', lambda: self.master.manage_thumbs(cfg['outdir']))
+        menu.addAction('Open Video File...', lambda: self.notify.emit({'type': 'load_view'}))
+        menu.addAction('Open Thumbs Manager', lambda: self.notify.emit({'type': 'manage_thumbs'}))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
         menu.exec_(self.mapToGlobal(pos))
 
 
 class tScrollArea(QScrollArea):
-    master = None
-    def __init__(self, *args, master, **kwargs):
+    notify = pyqtSignal(dict)
+
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.master = master
         self.delayTimeout = 200
         self._resizeTimer = QTimer(self)
         self._resizeTimer.timeout.connect(self._delayedUpdate)
@@ -422,8 +425,10 @@ class tScrollArea(QScrollArea):
 
     def _delayedUpdate(self):
         self._resizeTimer.stop()
-        tlwidth = self.master.tlwidth
-        tlheight = self.master.tlheight
+        # ask parent to call our own do_update()
+        self.notify.emit({'type': 'scroll_do_update'})
+
+    def do_update(self, tlwidth, tlheight):
         if tlwidth < 1 or tlheight < 1:
             return
         rows = int(self.viewport().height() / tlheight + 0.5)
@@ -434,7 +439,7 @@ class tScrollArea(QScrollArea):
             cols = 1
         if cols != cfg['grid_columns']:
             cfg['grid_columns'] = cols
-            self.master.rebuild_view()
+            self.notify.emit({'type': 'rebuild_view'})
 
     def clear_grid(self):
         layout = self.widget().layout()
@@ -627,15 +632,6 @@ class sMainWindow(QMainWindow):
             die(0)
 
     def contextMenuEvent(self, event):
-        self.select_context_menu()
-
-    def select_context_menu(self):
-        if len(self.tlabels) > 0:
-            self.tlabels[self.cur].contextMenu_show(QPoint(int(self.tlwidth/2), int(self.tlheight/2)))
-        else:
-            self.main_context_menu(QPoint(20,20))
-
-    def main_context_menu(self, pos):
         clipboard = QApplication.clipboard()
         menu = QMenu(self)
         if self.fname:
@@ -649,7 +645,7 @@ class sMainWindow(QMainWindow):
         menu.addAction('Open Thumbs Manager', lambda: self.manage_thumbs(cfg['outdir']))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
-        menu.exec_(self.mapToGlobal(pos))
+        menu.exec_(self.mapToGlobal(event.pos()))
 
     def manage_thumbs(self, outdir):
         dlg = tmDialog(self, odir=cfg['outdir'])
@@ -658,6 +654,27 @@ class sMainWindow(QMainWindow):
             lfile = dlg.get_loadfile()
             if lfile:
                 self.load_view(lfile)
+
+    # handle various notifications emitted by widgets down the road
+    @pyqtSlot(dict)
+    def notify_receive(self, event):
+        eprint(4, 'got event: ', event)
+        if event['type'] == 'set_cursorw':
+            self.set_cursorw(event['id'])
+        elif event['type'] == 'optimize_extent':
+            self.optimize_extent()
+        elif event['type'] == 'load_view':
+            self.load_view(self.vpath)
+        elif event['type'] == 'manage_thumbs':
+            self.manage_thumbs(cfg['outdir'])
+        elif event['type'] == 'rebuild_view':
+            self.rebuild_view()
+        elif event['type'] == 'scroll_do_update':
+            self.scroll.do_update(self.tlwidth, self.tlheight)
+        elif event['type'] == 'play_video':
+            play_video(self.fname, event['ts'], event['pause'])
+        else:
+            eprint(0, 'event not handled: ', event)
 
     def init_window(self, title):
         self.setWindowTitle(title)
@@ -684,7 +701,8 @@ class sMainWindow(QMainWindow):
         thumb_layout = QGridLayout(thumb_frame)
         thumb_layout.setContentsMargins(0, 0, 0, 0)
         thumb_layout.setSpacing(0)
-        self.scroll = tScrollArea(master=self)
+        self.scroll = tScrollArea()
+        self.scroll.notify.connect(self.notify_receive)
         self.scroll.setWidget(thumb_frame)
         self.scroll.setWidgetResizable(True)
         self.scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -719,7 +737,7 @@ class sMainWindow(QMainWindow):
         QShortcut('Space', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2], True))
         QShortcut('Return', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2], True))
         QShortcut('Shift+Return', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2]))
-        QShortcut('Ctrl+Return', self).activated.connect(self.select_context_menu)
+        QShortcut('Ctrl+Return', self).activated.connect(lambda: contextMenuEvent(None))
         # start in selected mode of operation
         self.show()
         if cfg['manage']:
@@ -767,9 +785,8 @@ class sMainWindow(QMainWindow):
         # load thumbnails and make labels
         self.statdsp[0].setText('Loading ')
         self.progbar.show()
-        self.tlabels = make_tlabels(self.tlabels, self.thdir, self.statdsp[1], self.progbar, self.broken_img)
-        for tl in self.tlabels:
-            tl.master = self
+        self.tlabels = make_tlabels(self.tlabels, self.thdir, self.statdsp[1],
+                                self.progbar, self.broken_img, self.notify_receive)
         # roughly fix window geometry
         self.tlwidth = self.tlabels[0].width()
         self.tlheight = self.tlabels[0].height()
@@ -1009,12 +1026,13 @@ def clear_thumbdir(thdir):
                 pass
 
 # generate clickable thumbnail labels
-def make_tlabels(tlabels, thdir, ilabel, pbar, dummy_img):
+def make_tlabels(tlabels, thdir, ilabel, pbar, dummy_img, receptor):
     try:
         with open(os.path.join(thdir, _FFPREVIEW_IDX), 'r') as idxfile:
             idx = json.load(idxfile)
             if cfg['verbosity'] > 3:
-                eprint(3, 'idx = ' + json.dumps(idx, indent=2))
+                eprint(4, 'idx = ' + json.dumps(idx, indent=2))
+            meta = {'fname': os.path.join(idx['path'], idx['name']), 'thdir': thdir}
             for th in idx['th']:
                 if th[0] % 100 == 0:
                     ilabel.setText('%d / %d' % (th[0], idx['count']))
@@ -1023,7 +1041,7 @@ def make_tlabels(tlabels, thdir, ilabel, pbar, dummy_img):
                 thumb = QPixmap(os.path.join(thdir, th[1]))
                 if thumb.isNull():
                     thumb = dummy_img.scaledToWidth(cfg['thumb_width'])
-                tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]), info=th)
+                tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]), info=th, meta=meta, receptor=receptor)
                 tlabels.append(tlabel)
     except Exception as e:
         eprint(0, str(e))

@@ -427,7 +427,7 @@ class tScrollArea(QScrollArea):
         if tlwidth < 1 or tlheight < 1:
             return
         rows = int(self.viewport().height() / tlheight + 0.5)
-        self.verticalScrollBar().setSingleStep(tlheight / 5.9287)
+        self.verticalScrollBar().setSingleStep(int(tlheight / 5.9287))
         cfg['grid_rows'] = rows
         cols = int((self.viewport().width()) / tlwidth)
         if cols < 1:
@@ -457,7 +457,7 @@ class tScrollArea(QScrollArea):
             if x >= cfg['grid_columns']:
                 x = 0; y += 1
             if pbar and cnt % 100 == 0:
-                pbar.setValue(cnt * 100 / l)
+                pbar.setValue(int(cnt * 100 / l))
                 QApplication.processEvents()
             cnt += 1
         if y < cfg['grid_rows']:
@@ -631,7 +631,7 @@ class sMainWindow(QMainWindow):
 
     def select_context_menu(self):
         if len(self.tlabels) > 0:
-            self.tlabels[self.cur].contextMenu_show(QPoint(self.tlwidth/2, self.tlheight/2))
+            self.tlabels[self.cur].contextMenu_show(QPoint(int(self.tlwidth/2), int(self.tlheight/2)))
         else:
             self.main_context_menu(QPoint(20,20))
 
@@ -892,7 +892,7 @@ def make_thumbs(vidfile, thinfo, thdir, ilabel=None, pbar=None):
                     if ilabel and pbar:
                         ilabel.setText('%s / %d s' % (t.split('.')[0], thinfo['duration']))
                         if thinfo['duration']:
-                            pbar.setValue(float(t) * 100 / thinfo['duration'])
+                            pbar.setValue(int(float(t) * 100 / thinfo['duration']))
                         QApplication.processEvents()
                     else:
                         print('\r%s / %d s ' % (t.split('.')[0], thinfo['duration']), end='', file=sys.stderr)
@@ -1018,7 +1018,7 @@ def make_tlabels(tlabels, thdir, ilabel, pbar, dummy_img):
             for th in idx['th']:
                 if th[0] % 100 == 0:
                     ilabel.setText('%d / %d' % (th[0], idx['count']))
-                    pbar.setValue(th[0] * 100 / idx['count'])
+                    pbar.setValue(int(th[0] * 100 / idx['count']))
                     QApplication.processEvents()
                 thumb = QPixmap(os.path.join(thdir, th[1]))
                 if thumb.isNull():

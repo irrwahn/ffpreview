@@ -73,20 +73,22 @@ optional arguments:
   and end times match, and the index file appears to be healthy.
 
 window controls:
-  ESC, Ctrl+Q     quit application
-  Ctrl+F          toggle full screen view
-  Ctrl+G          adjust window geometry for optimal fit
-  Ctrl+O          show open file dialog
-  Ctrl+M          open thumbnail manager
-  Double-click    open video at clicked position in paused state
-  Shift-click     play video starting at clicked position
-  Mouse-2         open the context menu
+  ESC               leave full screen view, quit application
+  Ctrl+Q, Ctrl-W    quit application
+  Alt+Return, F     toggle full screen view
+  Ctrl+G            adjust window geometry for optimal fit
+  Ctrl+O            show open file dialog
+  Ctrl+M            open thumbnail manager
+  Double-click,
+  Return, Space     open video at selected position in paused state
+  Shift-click,
+  Shift+Return      play video starting at selected position
+  Mouse-2, Menu,
+  Alt+Return        open the context menu
   Up, Down,
   PgUp, PgDown,
-  Home, End       move highlighted selection marker
-  Enter           open video at selected position in paused state
-  Shift+Enter     play video starting at selected position
-  Alt+Enter       open the context menu
+  Home, End,
+  TAB, Shift+TAB    move highlighted selection marker
 ```
 ### Examples
 
@@ -102,9 +104,15 @@ $ ./ffpreview.py my_video.mp4
 $ ./ffpreview.py -o ~/scratch -w 256 -g 8x4 -N 10 some_movie.mkv
 ```
 
-#### Run ffpreview in batch mode:
+#### Start ffpreview in thumbnail manager mode:
+```
+$ ./ffpreview.py -m
+```
+
+#### Run ffpreview in batch mode (console only, no GUI):
 ```
 $ ./ffpreview.py -b movie1.mkv movie2.mp4 another.mpg
+$ ./ffpreview.py -b /some/directory/*
 ```
 
 ## License

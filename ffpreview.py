@@ -144,20 +144,22 @@ def configure():
                '  -N, -n and -s options, provided that filename, duration, start\n'
                '  and end times match, and the index file appears to be healthy.\n'
                '\nwindow controls:\n'
-               '  ESC, Ctrl+Q     quit application\n'
-               '  Ctrl+F          toggle full screen view\n'
-               '  Ctrl+G          adjust window geometry for optimal fit\n'
-               '  Ctrl+O          show open file dialog\n'
-               '  Ctrl+M          open thumbnail manager\n'
-               '  Double-click    open video at clicked position in paused state\n'
-               '  Shift-click     play video starting at clicked position\n'
-               '  Mouse-2         open the context menu\n'
+               '  ESC               leave full screen view, quit application\n'
+               '  Ctrl+Q, Ctrl-W    quit application\n'
+               '  Alt+Return, F     toggle full screen view\n'
+               '  Ctrl+G            adjust window geometry for optimal fit\n'
+               '  Ctrl+O            show open file dialog\n'
+               '  Ctrl+M            open thumbnail manager\n'
+               '  Double-click,\n'
+               '  Return, Space     open video at selected position in paused state\n'
+               '  Shift-click,\n'
+               '  Shift+Return      play video starting at selected position\n'
+               '  Mouse-2, Menu,\n'
+               '  Alt+Return        open the context menu\n'
                '  Up, Down,\n'
                '  PgUp, PgDown,\n'
-               '  Home, End       move highlighted selection marker\n'
-               '  Enter           open video at selected position in paused state\n'
-               '  Shift+Enter     play video starting at selected position\n'
-               '  Alt+Enter       open the context menu\n'
+               '  Home, End,\n'
+               '  TAB, Shift+TAB    move highlighted selection marker\n'
     )
     parser.add_argument('filename', nargs='*', default=[os.getcwd()], help='input video file')
     parser.add_argument('-b', '--batch', action='count', help='batch mode, do not draw window')
@@ -349,7 +351,7 @@ class sQIcon(QIcon):
             super().addPixmap(sQPixmap(imgdata=imgdata))
 
 class tLabel(QWidget):
-    __slots__ = ['info']
+    __slots__ = ['info', 'master']
     def __init__(self, *args, pixmap=None, text=None, info=None, **kwargs):
         super().__init__(*args, **kwargs)
         layout = QVBoxLayout(self)
@@ -372,48 +374,44 @@ class tLabel(QWidget):
         self.setMaximumSize(self.width(), self.height())
 
     def mouseReleaseEvent(self, event):
-        self.window().set_cursorw(self)
+        self.master.set_cursorw(self)
         if QApplication.keyboardModifiers() == Qt.ShiftModifier:
-            play_video(self.window().fname, self.info[2])
+            play_video(self.master.fname, self.info[2])
 
     def mouseDoubleClickEvent(self, event):
-        play_video(self.window().fname, self.info[2], True)
+        play_video(self.master.fname, self.info[2], True)
 
     def contextMenuEvent(self, event):
-        self.window().set_cursorw(self)
+        self.master.set_cursorw(self)
         self.contextMenu_show(event.pos())
 
     def contextMenu_show(self, pos):
+        clipboard = QApplication.clipboard()
         menu = QMenu(self)
-        menu.addAction('Play From Here',
-                    lambda: play_video(self.window().fname, self.info[2]))
-        menu.addAction('Play From Start',
-                    lambda: play_video(self.window().fname))
+        menu.addAction('Play From Here', lambda: play_video(self.master.fname, self.info[2]))
+        menu.addAction('Play From Start', lambda: play_video(self.master.fname))
         menu.addSeparator()
-        menu.addAction('Copy Timestamp [H:M:S.ms]',
-                    lambda: self.window().clipboard.setText(s2hms(self.info[2])))
-        menu.addAction('Copy Timestamp [S.ms]',
-                    lambda: self.window().clipboard.setText(self.info[2]))
+        menu.addAction('Copy Timestamp [H:M:S.ms]', lambda: clipboard.setText(s2hms(self.info[2])))
+        menu.addAction('Copy Timestamp [S.ms]', lambda: clipboard.setText(self.info[2]))
         menu.addSeparator()
-        menu.addAction('Copy Original Filename',
-                    lambda: self.window().clipboard.setText(self.window().fname))
-        menu.addAction('Copy Thumb Filename',
-                    lambda: self.window().clipboard.setText(os.path.join(self.window().thdir, self.info[1])))
-        menu.addAction('Copy Thumbnail Image',
-                    lambda: self.window().clipboard.setPixmap(self.layout().itemAt(0).widget().pixmap()))
+        menu.addAction('Copy Original Filename', lambda: clipboard.setText(self.master.fname))
+        menu.addAction('Copy Thumb Filename', lambda: clipboard.setText(os.path.join(self.master.thdir, self.info[1])))
+        menu.addAction('Copy Thumbnail Image', lambda: clipboard.setPixmap(self.layout().itemAt(0).widget().pixmap()))
         menu.addSeparator()
-        menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
+        menu.addAction('Optimize Window Extent', lambda: self.master.optimize_extent())
         menu.addSeparator()
-        menu.addAction('Open Video File...', lambda: self.window().load_view(self.window().vpath))
-        menu.addAction('Open Thumbs Manager', lambda: self.window().manage_thumbs(cfg['outdir']))
+        menu.addAction('Open Video File...', lambda: self.master.load_view(self.master.vpath))
+        menu.addAction('Open Thumbs Manager', lambda: self.master.manage_thumbs(cfg['outdir']))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
         menu.exec_(self.mapToGlobal(pos))
 
 
 class tScrollArea(QScrollArea):
-    def __init__(self, *args, imgdata=None, **kwargs):
+    master = None
+    def __init__(self, *args, master, **kwargs):
         super().__init__(*args, **kwargs)
+        self.master = master
         self.delayTimeout = 200
         self._resizeTimer = QTimer(self)
         self._resizeTimer.timeout.connect(self._delayedUpdate)
@@ -424,8 +422,8 @@ class tScrollArea(QScrollArea):
 
     def _delayedUpdate(self):
         self._resizeTimer.stop()
-        tlwidth = self.window().tlwidth
-        tlheight = self.window().tlheight
+        tlwidth = self.master.tlwidth
+        tlheight = self.master.tlheight
         if tlwidth < 1 or tlheight < 1:
             return
         rows = int(self.viewport().height() / tlheight + 0.5)
@@ -436,23 +434,109 @@ class tScrollArea(QScrollArea):
             cols = 1
         if cols != cfg['grid_columns']:
             cfg['grid_columns'] = cols
-            self.window().fill_grid()
+            self.master.rebuild_view()
 
-    def contextMenuEvent(self, event):
-        menu = QMenu(self)
-        menu.addAction('Play From Start',
-                    lambda: play_video(self.window().fname))
-        menu.addSeparator()
-        menu.addAction('Copy Original Filename',
-                    lambda: self.window().clipboard.setText(self.window().fname))
-        menu.addSeparator()
-        menu.addAction('Optimize Window Extent', lambda: self.window().optimize_extent())
-        menu.addSeparator()
-        menu.addAction('Open Video File...', lambda: self.window().load_view(self.window().vpath))
-        menu.addAction('Open Thumbs Manager', lambda: self.window().manage_thumbs(cfg['outdir']))
-        menu.addSeparator()
-        menu.addAction('Quit', lambda: die(0))
-        menu.exec_(self.mapToGlobal(event.pos()))
+    def clear_grid(self):
+        layout = self.widget().layout()
+        while layout.count():
+            chw = layout.takeAt(0).widget()
+            layout.removeWidget(chw)
+            chw.setParent(None)
+            chw.deleteLater()
+
+    def fill_grid(self, tlabels, pbar=None):
+        slave = self.widget()
+        layout = slave.layout()
+        slave.setUpdatesEnabled(False)
+        l = len(tlabels)
+        x = 0; y = 0; cnt = 0
+        for tl in tlabels:
+            layout.removeWidget(tl)
+            layout.addWidget(tl, y, x)
+            x += 1
+            if x >= cfg['grid_columns']:
+                x = 0; y += 1
+            if pbar and cnt % 100 == 0:
+                pbar.setValue(cnt * 100 / l)
+                QApplication.processEvents()
+            cnt += 1
+        if y < cfg['grid_rows']:
+            cfg['grid_rows'] = y + 1
+        if y == 0 and x < cfg['grid_columns']:
+            cfg['grid_columns'] = x
+        slave.setUpdatesEnabled(True)
+
+
+class tmDialog(QDialog):
+    ilist = []
+    outdir = ''
+    loadfile = ''
+    def __init__(self, *args, odir='', **kwargs):
+        super().__init__(*args, **kwargs)
+        self.outdir = odir
+        self.setWindowTitle("Thumbnail Manager")
+        self.resize(600, 700)
+        self.dlg_layout = QVBoxLayout(self)
+        self.list_widget = QListWidget()
+        self.list_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.list_widget.itemDoubleClicked.connect(self.accept)
+        self.btn_layout = QHBoxLayout()
+        self.load_button = QPushButton("Load Thumbnails")
+        self.load_button.clicked.connect(self.accept)
+        self.load_button.setDefault(True)
+        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button.clicked.connect(self.refresh_list)
+        self.remove_button = QPushButton("Remove Selected")
+        self.remove_button.clicked.connect(self.remove)
+        self.close_button = QPushButton("Close")
+        self.close_button.clicked.connect(self.reject)
+        self.btn_layout.addWidget(self.load_button)
+        self.btn_layout.addWidget(self.refresh_button)
+        self.btn_layout.addWidget(self.remove_button)
+        self.btn_layout.addWidget(self.close_button)
+        self.dlg_layout.addWidget(self.list_widget)
+        self.dlg_layout.addLayout(self.btn_layout)
+        self.refresh_list()
+
+    def accept(self):
+        for item in self.list_widget.selectedItems():
+            if item.vfile:
+                self.loadfile = item.vfile
+                eprint(1, "open ", item.vfile)
+                super().accept()
+
+    def refresh_list(self):
+        self.ilist = get_indexfiles(self.outdir)
+        self.list_widget.clear()
+        for entry in self.ilist:
+            item = QListWidgetItem()
+            item.setText(entry['tdir'])
+            if not entry['idx'] or not entry['vfile']:
+                item.setForeground(QColor('red'))
+            item.vfile = entry['vfile']
+            self.list_widget.addItem(item)
+
+    def remove(self):
+        dirs = [sel.text() for sel in self.list_widget.selectedItems()]
+        l = len(dirs)
+        if l < 1:
+            return
+        mbox = QMessageBox()
+        mbox.setIcon(QMessageBox.Warning)
+        mbox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        mbox.setDefaultButton(QMessageBox.Cancel)
+        mbox.setWindowTitle('Remove Thumbnails')
+        mbox.setText('Confirm removal of %d folder%s.' % (l, 's' if l>1 else ''))
+        if QMessageBox.Ok == mbox.exec_():
+            for d in dirs:
+                rm = os.path.join(self.outdir, d)
+                eprint(1, "remove tree: ", rm)
+                shutil.rmtree(rm)
+            self.refresh_list()
+
+    def get_loadfile(self):
+        return self.loadfile
 
 
 class sMainWindow(QMainWindow):
@@ -488,60 +572,42 @@ class sMainWindow(QMainWindow):
         self.py = self.height() - self.scroll.viewport().height()
 
     def optimize_extent(self):
-        w = self.tlwidth * cfg['grid_columns'] + self.px
-        h = self.tlheight * cfg['grid_rows'] + self.py
-        self.resize(w, h)
+        if self.tlwidth > 0 and self.tlheight > 0:
+            w = self.tlwidth * cfg['grid_columns'] + self.px
+            h = self.tlheight * cfg['grid_rows'] + self.py
+            self.resize(w, h)
 
-    def fill_grid(self):
-        self.scrollframe.setUpdatesEnabled(False)
-        l = len(self.tlabels)
-        x = 0; y = 0; cnt = 0
-        for tl in self.tlabels:
-            self.thumb_layout.removeWidget(tl)
-            self.thumb_layout.addWidget(tl, y, x)
-            x += 1
-            if x >= cfg['grid_columns']:
-                x = 0; y += 1
-            if cnt % 100 == 0:
-                self.progbar.setValue(cnt * 100 / l)
-                QApplication.processEvents()
-            cnt += 1
-        if y < cfg['grid_rows']:
-            cfg['grid_rows'] = y + 1
-        if y == 0 and x < cfg['grid_columns']:
-            cfg['grid_columns'] = x
-        self.scrollframe.setUpdatesEnabled(True)
+    def rebuild_view(self):
+        self.scroll.fill_grid(self.tlabels, self.progbar)
         self.set_cursor()
 
-    def clear_grid(self):
+    def clear_view(self):
+        self.scroll.clear_grid()
         self.cur = 0
         for tl in self.tlabels:
-            self.thumb_layout.removeWidget(tl)
-            tl.setParent(None)
-            tl.close()
+            tl.destroy()
         self.tlabels = []
 
     def set_cursor(self, idx=None):
-        l = self.tlabels
-        if len(l) < 1:
+        if len(self.tlabels) < 1:
             return
         if idx is None:
             idx = self.cur
-        l[self.cur].setStyleSheet('QLabel {}')
+        self.tlabels[self.cur].setStyleSheet('QLabel {}')
         if idx < 0:
             idx = 0
-        elif idx >= len(l):
-            idx = len(l) - 1
+        elif idx >= len(self.tlabels):
+            idx = len(self.tlabels) - 1
         self.cur = idx
-        l[self.cur].setStyleSheet( 'QLabel {' + cfg['selstyle'] + '}' )
-        self.statdsp[3].setText('%d / %d' % (l[self.cur].info[0], self.thinfo['count']))
-        self.scroll.ensureWidgetVisible(l[self.cur], 0, 0)
+        self.tlabels[self.cur].setStyleSheet( 'QLabel {' + cfg['selstyle'] + '}' )
+        self.statdsp[3].setText('%d / %d' % (self.tlabels[self.cur].info[0], self.thinfo['count']))
+        self.scroll.ensureWidgetVisible(self.tlabels[self.cur], 0, 0)
 
     def set_cursorw(self, label):
         idx = self.tlabels.index(label)
         self.set_cursor(idx)
 
-    def advance_cursor(self, amnt):
+    def move_cursor(self, amnt):
         self.set_cursor(self.cur + amnt)
 
     def toggle_fullscreen(self):
@@ -556,77 +622,110 @@ class sMainWindow(QMainWindow):
 
     def esc_action(self):
         if self.windowState() & Qt.WindowFullScreen:
-            self.showNormal()
-            for w in self.statdsp:
-                w.show()
+            self.toggle_fullscreen()
         else:
             die(0)
+
+    def contextMenuEvent(self, event):
+        self.select_context_menu()
+
+    def select_context_menu(self):
+        if len(self.tlabels) > 0:
+            self.tlabels[self.cur].contextMenu_show(QPoint(self.tlwidth/2, self.tlheight/2))
+        else:
+            self.main_context_menu(QPoint(20,20))
+
+    def main_context_menu(self, pos):
+        clipboard = QApplication.clipboard()
+        menu = QMenu(self)
+        if self.fname:
+            menu.addAction('Play From Start', lambda: play_video(self.fname))
+            menu.addSeparator()
+            menu.addAction('Copy Original Filename', lambda: clipboard.setText(self.fname))
+            menu.addSeparator()
+        menu.addAction('Optimize Window Extent', lambda: self.optimize_extent())
+        menu.addSeparator()
+        menu.addAction('Open Video File...', lambda: self.load_view(self.vpath))
+        menu.addAction('Open Thumbs Manager', lambda: self.manage_thumbs(cfg['outdir']))
+        menu.addSeparator()
+        menu.addAction('Quit', lambda: die(0))
+        menu.exec_(self.mapToGlobal(pos))
+
+    def manage_thumbs(self, outdir):
+        dlg = tmDialog(self, odir=cfg['outdir'])
+        res = dlg.exec_()
+        if res == QDialog.Accepted:
+            lfile = dlg.get_loadfile()
+            if lfile:
+                self.load_view(lfile)
 
     def init_window(self, title):
         self.setWindowTitle(title)
         self.broken_img = sQPixmap(imgdata=_broken_img_png)
-        self.ffpreview_ico = sQIcon(imgdata=_ffpreview_png)
-        self.setWindowIcon(self.ffpreview_ico)
-        self.clipboard = QApplication.clipboard()
+        ffpreview_ico = sQIcon(imgdata=_ffpreview_png)
+        self.setWindowIcon(ffpreview_ico)
         self.resize(500, 300)
         self.setStyleSheet(cfg['appstyle'])
-
-        self.statbar = QHBoxLayout()
+        # set up status bar
+        statbar = QHBoxLayout()
         self.statdsp = []
         for i in range(4):
             s = QLabel('')
             s.resize(100, 20)
             s.setStyleSheet("QLabel {margin: 0px 2px 0px 2px;}");
             self.statdsp.append(s)
-            self.statbar.addWidget(s)
+            statbar.addWidget(s)
         self.progbar = QProgressBar()
         self.progbar.resize(100, 20)
         self.progbar.hide()
-        self.statbar.addWidget(self.progbar)
-
-        self.scrollframe = QFrame()
-        self.scroll = tScrollArea()
-        self.scroll.setWidget(self.scrollframe)
+        statbar.addWidget(self.progbar)
+        # set up thumbnail view area
+        thumb_frame = QWidget()
+        thumb_layout = QGridLayout(thumb_frame)
+        thumb_layout.setContentsMargins(0, 0, 0, 0)
+        thumb_layout.setSpacing(0)
+        self.scroll = tScrollArea(master=self)
+        self.scroll.setWidget(thumb_frame)
         self.scroll.setWidgetResizable(True)
         self.scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll.setStyleSheet('QFrame {border: none;}')
-        self.thumb_layout = QGridLayout(self.scrollframe)
-        self.thumb_layout.setContentsMargins(0, 0, 0, 0)
-        self.thumb_layout.setSpacing(0)
-
-        self.main_frame = QWidget()
-        self.main_layout = QVBoxLayout(self.main_frame)
-        self.main_layout.setContentsMargins(0, 2, 0, 0)
-        self.main_layout.addWidget(self.scroll)
-        self.main_layout.addLayout(self.statbar)
-        self.setCentralWidget(self.main_frame)
-
+        # set up main window layout
+        main_frame = QWidget()
+        main_layout = QVBoxLayout(main_frame)
+        main_layout.setContentsMargins(0, 2, 0, 0)
+        main_layout.addWidget(self.scroll)
+        main_layout.addLayout(statbar)
+        self.setCentralWidget(main_frame)
+        self.show()
+        # register shotcuts
         QShortcut('Esc', self).activated.connect(self.esc_action)
         QShortcut('Ctrl+Q', self).activated.connect(lambda: die(0))
         QShortcut('Ctrl+W', self).activated.connect(lambda: die(0))
-        QShortcut('Ctrl+F', self).activated.connect(self.toggle_fullscreen)
+        QShortcut('F', self).activated.connect(self.toggle_fullscreen)
+        QShortcut('Alt+Return', self).activated.connect(self.toggle_fullscreen)
         QShortcut('Ctrl+G', self).activated.connect(self.optimize_extent)
-        QShortcut('Ctrl+O', self).activated.connect(lambda: self.load_view(self.thinfo['path']))
+        QShortcut('Ctrl+O', self).activated.connect(lambda: self.load_view(self.vpath))
         QShortcut('Ctrl+M', self).activated.connect(lambda: self.manage_thumbs(cfg['outdir']))
-        QShortcut('Tab', self).activated.connect(lambda: self.advance_cursor(1))
-        QShortcut('Shift+Tab', self).activated.connect(lambda: self.advance_cursor(-1))
-        QShortcut('Right', self).activated.connect(lambda: self.advance_cursor(1))
-        QShortcut('Left', self).activated.connect(lambda: self.advance_cursor(-1))
-        QShortcut('Up', self).activated.connect(lambda: self.advance_cursor(-cfg['grid_columns']))
-        QShortcut('Down', self).activated.connect(lambda: self.advance_cursor(cfg['grid_columns']))
-        QShortcut('PgUp', self).activated.connect(lambda: self.advance_cursor(-cfg['grid_rows'] * cfg['grid_columns']))
-        QShortcut('PgDown', self).activated.connect(lambda: self.advance_cursor(cfg['grid_rows'] * cfg['grid_columns']))
+        QShortcut('Tab', self).activated.connect(lambda: self.move_cursor(1))
+        QShortcut('Shift+Tab', self).activated.connect(lambda: self.move_cursor(-1))
+        QShortcut('Right', self).activated.connect(lambda: self.move_cursor(1))
+        QShortcut('Left', self).activated.connect(lambda: self.move_cursor(-1))
+        QShortcut('Up', self).activated.connect(lambda: self.move_cursor(-cfg['grid_columns']))
+        QShortcut('Down', self).activated.connect(lambda: self.move_cursor(cfg['grid_columns']))
+        QShortcut('PgUp', self).activated.connect(lambda: self.move_cursor(-cfg['grid_rows'] * cfg['grid_columns']))
+        QShortcut('PgDown', self).activated.connect(lambda: self.move_cursor(cfg['grid_rows'] * cfg['grid_columns']))
         QShortcut('Home', self).activated.connect(lambda: self.set_cursor(0))
         QShortcut('End', self).activated.connect(lambda: self.set_cursor(len(self.tlabels)-1))
+        QShortcut('Space', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2], True))
         QShortcut('Return', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2], True))
         QShortcut('Shift+Return', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2]))
-        QShortcut('Alt+Return', self).activated.connect(
-                    lambda: self.tlabels[self.cur].contextMenu_show(QPoint(self.tlwidth/2, self.tlheight/2)))
-        self.set_cursor(0)
+        QShortcut('Ctrl+Return', self).activated.connect(self.select_context_menu)
 
     def load_view(self, fname):
         # sanitize file name
+        if not fname:
+            fname = os.getcwd()
         if not os.path.exists(fname) or not os.access(fname, os.R_OK):
             fname = os.path.dirname(fname)
             if not os.path.isdir(fname):
@@ -636,7 +735,7 @@ class sMainWindow(QMainWindow):
             options |= QFileDialog.DontUseNativeDialog
             fname, _ = QFileDialog.getOpenFileName(self, 'Open File', fname,
                         'Video Files (*.avi *.mkv *.mp4);;All Files (*)', options=options)
-        if not os.path.exists(fname) or not os.access(fname, os.R_OK):
+        if not fname or not os.path.exists(fname) or not os.access(fname, os.R_OK):
             return
         self.fname = os.path.abspath(fname)
         self.vfile = os.path.basename(self.fname)
@@ -646,7 +745,7 @@ class sMainWindow(QMainWindow):
         # clear previous view
         self.statdsp[0].setText('Clearing view')
         QApplication.processEvents()
-        self.clear_grid()
+        self.clear_view()
         # analyze video
         self.statdsp[0].setText('Analyzing')
         QApplication.processEvents()
@@ -664,18 +763,21 @@ class sMainWindow(QMainWindow):
         self.statdsp[0].setText('Loading ')
         self.progbar.show()
         self.tlabels = make_tlabels(self.tlabels, self.thdir, self.statdsp[1], self.progbar, self.broken_img)
+        for tl in self.tlabels:
+            tl.master = self
         # roughly fix window geometry
         self.tlwidth = self.tlabels[0].width()
         self.tlheight = self.tlabels[0].height()
         w = self.tlwidth * cfg['grid_columns'] + self.px
         h = self.tlheight * cfg['grid_rows'] + self.py
         self.resize(w, h)
-        # fill the view grid
+        # build thumbnail view
         self.statdsp[0].setText('Building view')
         self.statdsp[1].setText('')
         self.statdsp[2].setText('')
         QApplication.processEvents()
-        self.fill_grid()
+        self.rebuild_view()
+        self.set_cursor(0)
         self.progbar.hide()
         QApplication.processEvents()
         # final window touch-up
@@ -685,78 +787,6 @@ class sMainWindow(QMainWindow):
         self.calculate_props()
         self.setMinimumSize(self.tlwidth + self.px, self.tlheight + self.py)
         self.optimize_extent()
-
-    def manage_thumbs(self, outdir):
-        ilist = []
-        def refresh_list(lw, outdir):
-            ilist = get_indexfiles(outdir)
-            lw.clear()
-            for entry in ilist:
-                item = QListWidgetItem()
-                item.setText(entry['tdir'])
-                if not entry['idx'] or not entry['vfile']:
-                    item.setForeground(QColor('red'))
-                item.vfile = entry['vfile']
-                lw.addItem(item)
-
-        def remove(dirs, lw, outdir):
-            for d in dirs:
-                rm = os.path.join(outdir, d)
-                eprint(1, "remove tree: ", rm)
-                shutil.rmtree(rm)
-            refresh_list(lw, outdir)
-
-        def remove_btn(lw, outdir):
-            dirs = [sel.text() for sel in lw.selectedItems()]
-            l = len(dirs)
-            if l < 1:
-                return
-            mbox = QMessageBox()
-            mbox.setIcon(QMessageBox.Warning)
-            mbox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-            mbox.setDefaultButton(QMessageBox.Cancel)
-            mbox.setWindowTitle('Remove Thumbnails')
-            mbox.setText('Confirm removal of %d folder%s.' % (l, 's' if l>1 else ''))
-            if QMessageBox.Ok == mbox.exec_():
-                remove(dirs, lw, outdir)
-
-        def load_thumbs(item):
-            if item.vfile:
-                eprint(1, "open ", item.vfile)
-                dlg.close()
-                self.load_view(item.vfile)
-
-        def load_thumbs_btn(lw):
-            for sel in lw.selectedItems():
-                load_thumbs(sel)
-                break
-
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Thumbnail Manager")
-        dlg.resize(600, 700)
-        dlg_layout = QVBoxLayout(dlg)
-        list_widget = QListWidget()
-        list_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        list_widget.itemDoubleClicked.connect(load_thumbs)
-        btn_layout = QHBoxLayout()
-        remove_button = QPushButton("Remove Selected")
-        remove_button.clicked.connect(lambda: remove_btn(list_widget, outdir))
-        refresh_button = QPushButton("Refresh")
-        refresh_button.clicked.connect(lambda: refresh_list(list_widget, outdir))
-        load_button = QPushButton("Load Thumbnails")
-        load_button.clicked.connect(lambda: load_thumbs_btn(list_widget))
-        load_button.setDefault(True)
-        close_button = QPushButton("Close")
-        close_button.clicked.connect(dlg.close)
-        btn_layout.addWidget(load_button)
-        btn_layout.addWidget(refresh_button)
-        btn_layout.addWidget(remove_button)
-        btn_layout.addWidget(close_button)
-        dlg_layout.addWidget(list_widget)
-        dlg_layout.addLayout(btn_layout)
-        refresh_list(list_widget, outdir)
-        dlg.exec_()
 
 
 ############################################################
@@ -878,6 +908,8 @@ def make_thumbs(vidfile, thinfo, thdir, ilabel=None, pbar=None):
 
 # open video in player
 def play_video(filename, start='0', paused=False):
+    if not filename:
+        return
     if paused and cfg['plpaused']:
         cmd = cfg['plpaused']
     else:
@@ -1083,8 +1115,6 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName('ffpreview')
     root = sMainWindow(title='ffpreview')
-    root.show()
-
     if cfg['manage']:
         root.manage_thumbs(cfg['outdir'])
     else:

@@ -754,7 +754,7 @@ class sMainWindow(QMainWindow):
         # analyze video
         self.statdsp[0].setText('Analyzing')
         QApplication.processEvents()
-        self.thinfo, ok = get_thinfo(fname, self.thdir)
+        self.thinfo, ok = get_thinfo(self.fname, self.thdir)
         if self.thinfo is None:
             self.statdsp[0].setText('Unrecognized file format')
             return

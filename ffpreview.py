@@ -697,7 +697,6 @@ class sMainWindow(QMainWindow):
         main_layout.addWidget(self.scroll)
         main_layout.addLayout(statbar)
         self.setCentralWidget(main_frame)
-        self.show()
         # register shotcuts
         QShortcut('Esc', self).activated.connect(self.esc_action)
         QShortcut('Ctrl+Q', self).activated.connect(lambda: die(0))
@@ -721,6 +720,12 @@ class sMainWindow(QMainWindow):
         QShortcut('Return', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2], True))
         QShortcut('Shift+Return', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2]))
         QShortcut('Ctrl+Return', self).activated.connect(self.select_context_menu)
+        # start in selected mode of operation
+        self.show()
+        if cfg['manage']:
+            self.manage_thumbs(cfg['outdir'])
+        else:
+            self.load_view(cfg['vid'][0])
 
     def load_view(self, fname):
         # sanitize file name
@@ -1104,6 +1109,7 @@ def main():
         signal.signal(signal.SIGQUIT, sig_handler)
         signal.signal(signal.SIGPIPE, signal.SIG_IGN)
 
+    # run in console batch mode, if requested
     if cfg['batch']:
         errcnt = 0
         for fn in cfg['vid']:
@@ -1111,16 +1117,11 @@ def main():
                 errcnt += 1
         exit(errcnt)
 
+    # set up window start main loop
     os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
     app = QApplication(sys.argv)
     app.setApplicationName('ffpreview')
-    root = sMainWindow(title='ffpreview')
-    if cfg['manage']:
-        root.manage_thumbs(cfg['outdir'])
-    else:
-        root.load_view(cfg['vid'][0])
-
-    # start main loop
+    sMainWindow(title='ffpreview')
     exit(app.exec_())
 
 # run application

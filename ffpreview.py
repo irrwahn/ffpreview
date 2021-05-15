@@ -88,7 +88,7 @@ def die(rc):
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
-    exit(rc)
+    sys.exit(rc)
 
 def sig_handler(signum, frame):
     eprint(0, 'ffpreview caught signal %d, exiting.' % signum)
@@ -184,7 +184,7 @@ def configure():
     if args.version:
         print('ffpreview version %s running on python %.1f.x (%s)'
                 % (_FFPREVIEW_VERSION, _PYTHON_VERSION, cfg['platform']))
-        exit(0)
+        sys.exit(0)
 
     # parse config file
     defconfpath = os.path.join( # try to determine user config file
@@ -293,7 +293,7 @@ def configure():
         os.makedirs(cfg['outdir'], exist_ok=True)
     except Exception as e:
         eprint(0, str(e))
-        exit(1)
+        sys.exit(1)
 
     return cfg
     # end of configure()
@@ -1115,14 +1115,14 @@ def main():
         for fn in cfg['vid']:
             if not batch_process(fn):
                 errcnt += 1
-        exit(errcnt)
+        sys.exit(errcnt)
 
     # set up window start main loop
     os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
     app = QApplication(sys.argv)
     app.setApplicationName('ffpreview')
     sMainWindow(title='ffpreview')
-    exit(app.exec_())
+    sys.exit(app.exec_())
 
 # run application
 if __name__== "__main__":

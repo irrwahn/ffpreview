@@ -445,11 +445,9 @@ class tScrollArea(QScrollArea):
         layout = self.widget().layout()
         while layout.count():
             chw = layout.takeAt(0).widget()
-            layout.removeWidget(chw)
-            chw.setParent(None)
             chw.deleteLater()
 
-    def fill_grid(self, tlabels, pbar=None):
+    def fill_grid(self, tlabels, progress_cb=None):
         slave = self.widget()
         layout = slave.layout()
         slave.setUpdatesEnabled(False)
@@ -461,9 +459,8 @@ class tScrollArea(QScrollArea):
             x += 1
             if x >= cfg['grid_columns']:
                 x = 0; y += 1
-            if pbar and cnt % 100 == 0:
-                pbar.setValue(int(cnt * 100 / l))
-                QApplication.processEvents()
+            if progress_cb and cnt % 100 == 0:
+                progress_cb(cnt, l)
             cnt += 1
         if y < cfg['grid_rows']:
             cfg['grid_rows'] = y + 1
@@ -583,7 +580,7 @@ class sMainWindow(QMainWindow):
             self.resize(w, h)
 
     def rebuild_view(self):
-        self.scroll.fill_grid(self.tlabels, self.progbar)
+        self.scroll.fill_grid(self.tlabels, self.show_progress)
         self.set_cursor()
 
     def clear_view(self):
@@ -746,7 +743,6 @@ class sMainWindow(QMainWindow):
             self.load_view(cfg['vid'][0])
 
     def show_progress(self, n, tot):
-        self.progbar.show()
         self.statdsp[1].setText('%d / %d' % (n, tot))
         if tot > 0:
             self.progbar.setValue(int(n * 100 / tot))

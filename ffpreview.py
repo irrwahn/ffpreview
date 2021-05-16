@@ -1174,17 +1174,22 @@ def main():
 
     # start console debugging thread, if _FF_DEBUG is set
     if _FF_DEBUG:
-        import threading, resource
+        import threading, resource, gc
         global _ffdbg_thread, _ffdbg_run
+        gc.set_debug(gc.DEBUG_SAVEALL)
         def _ffdbg_update(*args):
             tstart = time.time()
             def p(*args):
                 print(*args, file=sys.stderr)
             while _ffdbg_run:
-                p('----- %.3f -----' % (time.time()-tstart))
-                p('max rss: ', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, ' KiB')
-                p('tLabels: ', args[0]._dbg_num_tlabels)
                 time.sleep(1.5)
+                p('----- %.3f -----' % (time.time()-tstart))
+                p('max rss:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, 'KiB')
+                p('tLabels:', args[0]._dbg_num_tlabels)
+                p('gc cnt :', gc.get_count())
+            p('gc gen0:', gc.get_stats()[0])
+            p('gc gen1:', gc.get_stats()[1])
+            p('gc gen2:', gc.get_stats()[2])
         _ffdbg_thread = threading.Thread(target=_ffdbg_update, args=(root,))
         _ffdbg_run = True
         _ffdbg_thread.start()

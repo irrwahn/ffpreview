@@ -13,6 +13,8 @@ _FFPREVIEW_VERSION = '0.2+'
 
 _FFPREVIEW_IDX = 'ffpreview.idx'
 
+_FF_DEBUG = False
+
 import sys
 
 _PYTHON_VERSION = float("%d.%d" % (sys.version_info.major, sys.version_info.minor))
@@ -88,6 +90,11 @@ def die(rc):
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
+    if '_ffdbg_thread' in globals():
+        global _ffdbg_thread, _ffdbg_run
+        _ffdbg_run = False
+        eprint(0, 'waiting for debug thread to finish')
+        _ffdbg_thread.join()
     sys.exit(rc)
 
 def sig_handler(signum, frame):
@@ -184,7 +191,7 @@ def configure():
     if args.version:
         print('ffpreview version %s running on python %.1f.x (%s)'
                 % (_FFPREVIEW_VERSION, _PYTHON_VERSION, cfg['platform']))
-        sys.exit(0)
+        die(0)
 
     # parse config file
     defconfpath = os.path.join( # try to determine user config file
@@ -293,7 +300,7 @@ def configure():
         os.makedirs(cfg['outdir'], exist_ok=True)
     except Exception as e:
         eprint(0, str(e))
-        sys.exit(1)
+        die(1)
 
     return cfg
     # end of configure()
@@ -386,7 +393,7 @@ class tLabel(QWidget):
 
     def contextMenuEvent(self, event):
         self.notify.emit({'type': 'set_cursorw', 'id': self})
-        self.contextmenu_show(event.pos())
+        self.contextmenu_show(self.mapToGlobal(event.pos()))
 
     def contextmenu_show(self, pos):
         clipboard = QApplication.clipboard()
@@ -407,7 +414,7 @@ class tLabel(QWidget):
         menu.addAction('Open Thumbs Manager', lambda: self.notify.emit({'type': 'manage_thumbs'}))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
-        menu.exec_(self.mapToGlobal(pos))
+        menu.exec_(pos)
 
 
 class tScrollArea(QScrollArea):
@@ -555,6 +562,7 @@ class sMainWindow(QMainWindow):
     vpath = None
     thdir = None
     cur = 0
+    _dbg_num_tlabels = 0
 
     def __new__(cls, *args, title='', **kwargs):
         if cls._instance is None:
@@ -582,13 +590,16 @@ class sMainWindow(QMainWindow):
     def rebuild_view(self):
         self.scroll.fill_grid(self.tlabels, self.show_progress)
         self.set_cursor()
+        if _FF_DEBUG:
+            self._dbg_num_tlabels = len(self.findChildren(tLabel))
 
     def clear_view(self):
         self.scroll.clear_grid()
         self.cur = 0
-        for tl in self.tlabels:
-            tl.destroy()
-        self.tlabels = []
+        if self.tlabels:
+            self.tlabels.clear()
+        if _FF_DEBUG:
+                self._dbg_num_tlabels = len(self.findChildren(tLabel))
 
     def set_cursor(self, idx=None):
         if len(self.tlabels) < 1:
@@ -629,10 +640,19 @@ class sMainWindow(QMainWindow):
             die(0)
 
     def contextMenuEvent(self, event):
+        if event:
+            pos = event.pos()
+        elif len(self.tlabels) > 0:
+            pos = self.tlabels[self.cur].pos()
+            pos.setX(pos.x() + self.tlwidth / 2)
+            pos.setY(pos.y() + self.tlheight / 2)
+            return self.tlabels[self.cur].contextmenu_show(self.mapToGlobal(pos))
+        else:
+            pos = QPoint(self.width()/2, self.height()/2)
         clipboard = QApplication.clipboard()
         menu = QMenu(self)
         if self.fname:
-            menu.addAction('Play From Start', lambda: play_video(self.fname))
+            menu.addAction('Play From Start', lambda: self._play_video(ts='0'))
             menu.addSeparator()
             menu.addAction('Copy Original Filename', lambda: clipboard.setText(self.fname))
             menu.addSeparator()
@@ -642,7 +662,7 @@ class sMainWindow(QMainWindow):
         menu.addAction('Open Thumbs Manager', lambda: self.manage_thumbs(cfg['outdir']))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
-        menu.exec_(self.mapToGlobal(event.pos()))
+        menu.exec_(self.mapToGlobal(pos))
 
     def manage_thumbs(self, outdir):
         dlg = tmDialog(self, odir=cfg['outdir'])
@@ -651,6 +671,13 @@ class sMainWindow(QMainWindow):
             lfile = dlg.get_loadfile()
             if lfile:
                 self.load_view(lfile)
+
+    def _play_video(self, ts=None, paused=False):
+        if ts is None:
+            if len(self.tlabels) < 1:
+                return
+            ts = self.tlabels[self.cur].info[2]
+        play_video(self.fname, ts, paused)
 
     # handle various notifications emitted by widgets down the road
     @pyqtSlot(dict)
@@ -669,7 +696,7 @@ class sMainWindow(QMainWindow):
         elif event['type'] == 'scroll_do_update':
             self.scroll.do_update(self.tlwidth, self.tlheight)
         elif event['type'] == 'play_video':
-            play_video(self.fname, event['ts'], event['pause'])
+            self._play_video(ts=event['ts'], paused=event['pause'])
         else:
             eprint(0, 'event not handled: ', event)
 
@@ -731,16 +758,10 @@ class sMainWindow(QMainWindow):
         QShortcut('PgDown', self).activated.connect(lambda: self.move_cursor(cfg['grid_rows'] * cfg['grid_columns']))
         QShortcut('Home', self).activated.connect(lambda: self.set_cursor(0))
         QShortcut('End', self).activated.connect(lambda: self.set_cursor(len(self.tlabels)-1))
-        QShortcut('Space', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2], True))
-        QShortcut('Return', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2], True))
-        QShortcut('Shift+Return', self).activated.connect(lambda: play_video(self.fname, self.tlabels[self.cur].info[2]))
-        QShortcut('Ctrl+Return', self).activated.connect(lambda: contextMenuEvent(None))
-        # start in selected mode of operation
-        self.show()
-        if cfg['manage']:
-            self.manage_thumbs(cfg['outdir'])
-        else:
-            self.load_view(cfg['vid'][0])
+        QShortcut('Space', self).activated.connect(lambda: self._play_video(paused=True))
+        QShortcut('Return', self).activated.connect(lambda: self._play_video(paused=True))
+        QShortcut('Shift+Return', self).activated.connect(lambda: self._play_video())
+        QShortcut('Ctrl+Return', self).activated.connect(lambda: self.contextMenuEvent(None))
 
     def show_progress(self, n, tot):
         self.statdsp[1].setText('%d / %d' % (n, tot))
@@ -806,6 +827,8 @@ class sMainWindow(QMainWindow):
         # analyze video
         self.statdsp[0].setText('Analyzing')
         QApplication.processEvents()
+        if self.thinfo:
+            self.thinfo.clear()
         self.thinfo, ok = get_thinfo(self.fname, self.thdir)
         if self.thinfo is None:
             self.statdsp[0].setText('Unrecognized file format')
@@ -1131,20 +1154,49 @@ def main():
         signal.signal(signal.SIGQUIT, sig_handler)
         signal.signal(signal.SIGPIPE, signal.SIG_IGN)
 
+    global _FF_DEBUG
+    if os.environ.get('FFDEBUG'):
+        _FF_DEBUG = True
+
     # run in console batch mode, if requested
     if cfg['batch']:
         errcnt = 0
         for fn in cfg['vid']:
             if not batch_process(fn):
                 errcnt += 1
-        sys.exit(errcnt)
+        die(errcnt)
 
-    # set up window start main loop
-    os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
+    # set up window
+    if not _FF_DEBUG:
+        os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
     app = QApplication(sys.argv)
     app.setApplicationName('ffpreview')
-    sMainWindow(title='ffpreview')
-    sys.exit(app.exec_())
+    root = sMainWindow(title='ffpreview')
+
+    # start console debugging thread, if _FF_DEBUG is set
+    if _FF_DEBUG:
+        import threading, resource
+        global _ffdbg_thread, _ffdbg_run
+        def _ffdbg_update(*args):
+            tstart = time.time()
+            def p(*args):
+                print(*args, file=sys.stderr)
+            while _ffdbg_run:
+                p('----- %.3f -----' % (time.time()-tstart))
+                p('max rss: ', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, ' KiB')
+                p('tLabels: ', args[0]._dbg_num_tlabels)
+                time.sleep(1.5)
+        _ffdbg_thread = threading.Thread(target=_ffdbg_update, args=(root,))
+        _ffdbg_run = True
+        _ffdbg_thread.start()
+
+    # start in selected mode of operation, run main loop
+    root.show()
+    if cfg['manage']:
+        root.manage_thumbs(cfg['outdir'])
+    else:
+        root.load_view(cfg['vid'][0])
+    die(app.exec_())
 
 # run application
 if __name__== "__main__":

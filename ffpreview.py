@@ -1127,11 +1127,10 @@ def get_indexfiles(path):
             entry['idx'] = True
             with open(fidx, 'r') as idxfile:
                 idx = json.load(idxfile)
-                if 'name' in idx:
-                    if 'path' in idx:
-                        opath = os.path.join(idx['path'], idx['name'])
-                        if os.path.isfile(opath):
-                            entry['vfile'] = opath
+                if 'name' in idx and 'path' in idx:
+                    opath = os.path.join(idx['path'], idx['name'])
+                    if os.path.isfile(opath):
+                        entry['vfile'] = opath
         flist.append(entry)
     flist = sorted(flist, key=lambda k: k['tdir'])
     eprint(3, json.dumps(flist, indent=2))

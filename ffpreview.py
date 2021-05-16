@@ -745,6 +745,42 @@ class sMainWindow(QMainWindow):
         else:
             self.load_view(cfg['vid'][0])
 
+    def show_progress(self, n, tot):
+        self.progbar.show()
+        self.statdsp[1].setText('%d / %d' % (n, tot))
+        if tot > 0:
+            self.progbar.setValue(int(n * 100 / tot))
+        QApplication.processEvents()
+
+    # generate clickable thumbnail labels
+    def make_tlabels(self):
+        dummy_thumb = self.broken_img.scaledToWidth(cfg['thumb_width'])
+        tlabels = []
+        try:
+            with open(os.path.join(self.thdir, _FFPREVIEW_IDX), 'r') as idxfile:
+                idx = json.load(idxfile)
+                if cfg['verbosity'] > 3:
+                    eprint(4, 'idx = ' + json.dumps(idx, indent=2))
+                meta = {'fname': self.fname, 'thdir': self.thdir}
+                for th in idx['th']:
+                    if th[0] % 100 == 0:
+                        self.show_progress(th[0], idx['count'])
+                    thumb = QPixmap(os.path.join(self.thdir, th[1]))
+                    if thumb.isNull():
+                        thumb = dummy_thumb
+                    tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]),
+                                    info=th, meta=meta, receptor=self.notify_receive)
+                    tlabels.append(tlabel)
+        except Exception as e:
+            eprint(0, str(e))
+        if len(tlabels) == 0:
+            # no thumbnails available, make a dummy
+            tlabels.append(tLabel(pixmap=dummy_thumb, text=s2hms(str(cfg['start'])),
+                            info=[0, 'broken', str(cfg['start'])],
+                            meta={'fname': self.fname, 'thdir': self.thdir},
+                            receptor=self.notify_receive))
+        return tlabels
+
     def load_view(self, fname):
         # sanitize file name
         if not fname:
@@ -766,6 +802,8 @@ class sMainWindow(QMainWindow):
         self.thdir = os.path.join(cfg['outdir'], self.vfile)
         self.setWindowTitle('ffpreview - ' + self.vfile)
         # clear previous view
+        for sd in self.statdsp:
+            sd.setText('')
         self.statdsp[0].setText('Clearing view')
         QApplication.processEvents()
         self.clear_view()
@@ -781,12 +819,11 @@ class sMainWindow(QMainWindow):
             self.statdsp[0].setText('Processing')
             clear_thumbdir(self.thdir)
             self.progbar.show()
-            self.thinfo, ok = make_thumbs(fname, self.thinfo, self.thdir, self.statdsp[1], self.progbar)
+            self.thinfo, ok = make_thumbs(fname, self.thinfo, self.thdir, self.show_progress)
         # load thumbnails and make labels
         self.statdsp[0].setText('Loading ')
         self.progbar.show()
-        self.tlabels = make_tlabels(self.tlabels, self.thdir, self.statdsp[1],
-                                self.progbar, self.broken_img, self.notify_receive)
+        self.tlabels = self.make_tlabels()
         # roughly fix window geometry
         self.tlwidth = self.tlabels[0].width()
         self.tlheight = self.tlabels[0].height()
@@ -866,7 +903,7 @@ def get_meta(vidfile):
     return meta, False
 
 # extract thumbnails from video and collect timestamps
-def make_thumbs(vidfile, thinfo, thdir, ilabel=None, pbar=None):
+def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     global proc
     rc = False
     pictemplate = '%08d.png'
@@ -906,17 +943,10 @@ def make_thumbs(vidfile, thinfo, thdir, ilabel=None, pbar=None):
                     if cfg['start']:
                         t = str(float(t) + cfg['start'])
                     thinfo['th'].append([ cnt, pictemplate % cnt, t ])
-                    if ilabel and pbar:
-                        ilabel.setText('%s / %d s' % (t.split('.')[0], thinfo['duration']))
-                        if thinfo['duration']:
-                            pbar.setValue(int(float(t) * 100 / thinfo['duration']))
-                        QApplication.processEvents()
-                    else:
-                        print('\r%s / %d s ' % (t.split('.')[0], thinfo['duration']), end='', file=sys.stderr)
+                    if prog_cb and cnt % 10 == 0:
+                        prog_cb(float(t), thinfo['duration'])
         retval = proc.wait()
         proc = None
-        if not ilabel or not pbar:
-            print('\r                                  \r', end='', file=sys.stderr)
         if retval != 0:
             eprint(0, cmd + '\n  returned %d' % retval)
             eprint(1, ebuf)
@@ -1025,36 +1055,13 @@ def clear_thumbdir(thdir):
             except Exception as e:
                 pass
 
-# generate clickable thumbnail labels
-def make_tlabels(tlabels, thdir, ilabel, pbar, dummy_img, receptor):
-    try:
-        with open(os.path.join(thdir, _FFPREVIEW_IDX), 'r') as idxfile:
-            idx = json.load(idxfile)
-            if cfg['verbosity'] > 3:
-                eprint(4, 'idx = ' + json.dumps(idx, indent=2))
-            meta = {'fname': os.path.join(idx['path'], idx['name']), 'thdir': thdir}
-            for th in idx['th']:
-                if th[0] % 100 == 0:
-                    ilabel.setText('%d / %d' % (th[0], idx['count']))
-                    pbar.setValue(int(th[0] * 100 / idx['count']))
-                    QApplication.processEvents()
-                thumb = QPixmap(os.path.join(thdir, th[1]))
-                if thumb.isNull():
-                    thumb = dummy_img.scaledToWidth(cfg['thumb_width'])
-                tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]), info=th, meta=meta, receptor=receptor)
-                tlabels.append(tlabel)
-    except Exception as e:
-        eprint(0, str(e))
-    if len(tlabels) == 0:
-        # no thumbnails available, make dummy
-        th = [0, 'broken', str(cfg['start'])]
-        thumb = dummy_img.scaledToWidth(cfg['thumb_width'])
-        tlabel = tLabel(pixmap=thumb, text=s2hms(str(cfg['start'])), info=th)
-        tlabels.append(tlabel)
-    return tlabels
-
 # process a single file in console-only mode
 def batch_process(fname):
+    def cons_progress(n, tot):
+        print('\r%4d / %4d' % (int(n), int(tot)), end='', file=sys.stderr)
+        if tot > 0:
+            print(' %3d %%' % int(n * 100 / tot), end='', file=sys.stderr)
+
     # sanitize file name
     if not os.path.exists(fname) or not os.access(fname, os.R_OK):
         eprint(0, '%s: no permission' % fname)
@@ -1076,7 +1083,8 @@ def batch_process(fname):
         # (re)generate thumbnails and index file
         print('Processing', file=sys.stderr)
         clear_thumbdir(thdir)
-        thinfo, ok = make_thumbs(fname, thinfo, thdir)
+        thinfo, ok = make_thumbs(fname, thinfo, thdir, cons_progress)
+        print('\r                                  \r', end='', file=sys.stderr)
     else:
         print('', file=sys.stderr)
     if ok:

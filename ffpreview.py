@@ -358,10 +358,10 @@ class sQIcon(QIcon):
             super().addPixmap(sQPixmap(imgdata=imgdata))
 
 class tLabel(QWidget):
-    __slots__ = ['info', 'meta']
+    __slots__ = ['info']
     notify = pyqtSignal(dict)
 
-    def __init__(self, *args, pixmap=None, text=None, info=None, meta=None, receptor=None, **kwargs):
+    def __init__(self, *args, pixmap=None, text=None, info=None, receptor=None, **kwargs):
         super().__init__(*args, **kwargs)
         layout = QVBoxLayout(self)
         layout.setSpacing(0)
@@ -378,7 +378,6 @@ class tLabel(QWidget):
             tl.setAlignment(Qt.AlignCenter)
             layout.addWidget(tl)
         self.info = info
-        self.meta = meta
         self.notify.connect(receptor)
         self.focus = False
         self.adjustSize()
@@ -392,29 +391,7 @@ class tLabel(QWidget):
                     'pause': not (QApplication.keyboardModifiers() & Qt.ShiftModifier)})
 
     def contextMenuEvent(self, event):
-        self.notify.emit({'type': 'set_cursorw', 'id': self})
-        self.contextmenu_show(self.mapToGlobal(event.pos()))
-
-    def contextmenu_show(self, pos):
-        clipboard = QApplication.clipboard()
-        menu = QMenu(self)
-        menu.addAction('Play From Here', lambda: self.notify.emit({'type':'play_video', 'ts':self.info[2], 'pause':False}))
-        menu.addAction('Play From Start', lambda: self.notify.emit({'type':'play_video', 'ts':'0', 'pause':False}))
-        menu.addSeparator()
-        menu.addAction('Copy Timestamp [H:M:S.ms]', lambda: clipboard.setText(s2hms(self.info[2])))
-        menu.addAction('Copy Timestamp [S.ms]', lambda: clipboard.setText(self.info[2]))
-        menu.addSeparator()
-        menu.addAction('Copy Original Filename', lambda: clipboard.setText(self.meta['fname']))
-        menu.addAction('Copy Thumb Filename', lambda: clipboard.setText(os.path.join(self.meta['thdir'], self.info[1])))
-        menu.addAction('Copy Thumbnail Image', lambda: clipboard.setPixmap(self.layout().itemAt(0).widget().pixmap()))
-        menu.addSeparator()
-        menu.addAction('Optimize Window Extent', lambda: self.notify.emit({'type': 'optimize_extent'}))
-        menu.addSeparator()
-        menu.addAction('Open Video File...', lambda: self.notify.emit({'type': 'load_view'}))
-        menu.addAction('Open Thumbs Manager', lambda: self.notify.emit({'type': 'manage_thumbs'}))
-        menu.addSeparator()
-        menu.addAction('Quit', lambda: die(0))
-        menu.exec_(pos)
+        self.notify.emit({'type': 'context_menu', 'id': self, 'pos': self.mapToGlobal(event.pos())})
 
 
 class tScrollArea(QScrollArea):
@@ -641,29 +618,44 @@ class sMainWindow(QMainWindow):
             die(0)
 
     def contextMenuEvent(self, event):
+        tlabel = None
         if event:
+            # genuine click on canvas
             pos = event.pos()
         elif len(self.tlabels) > 0:
-            pos = self.tlabels[self.cur].pos()
+            # kbd shortcut, show context menu for active label
+            tlabel = self.tlabels[self.cur]
+            pos = tlabel.pos()
             pos.setX(pos.x() + self.tlwidth / 2)
             pos.setY(pos.y() + self.tlheight / 2)
-            return self.tlabels[self.cur].contextmenu_show(self.mapToGlobal(pos))
         else:
+            # kbd shortcut, have no active label
             pos = QPoint(self.width()/2, self.height()/2)
-        clipboard = QApplication.clipboard()
+        self.show_contextmenu(tlabel, self.mapToGlobal(pos))
+
+    def show_contextmenu(self, tlabel, pos):
         menu = QMenu(self)
+        if tlabel:
+            self.set_cursorw(tlabel)
+            menu.addAction('Play From Here', lambda: self._play_video(ts=tlabel.info[2]))
         if self.fname:
             menu.addAction('Play From Start', lambda: self._play_video(ts='0'))
-            menu.addSeparator()
-            menu.addAction('Copy Original Filename', lambda: clipboard.setText(self.fname))
-            menu.addSeparator()
-        menu.addAction('Optimize Window Extent', lambda: self.optimize_extent())
         menu.addSeparator()
+        if tlabel:
+            menu.addAction('Copy Timestamp [H:M:S.ms]', lambda: self.clipboard.setText(s2hms(tlabel.info[2])))
+            menu.addAction('Copy Timestamp [S.ms]', lambda: self.clipboard.setText(tlabel.info[2]))
+        if self.fname:
+            menu.addAction('Copy Original Filename', lambda: self.clipboard.setText(self.fname))
+        if tlabel:
+            menu.addAction('Copy Thumb Filename', lambda: self.clipboard.setText(os.path.join(self.thdir, tlabel.info[1])))
+            menu.addAction('Copy Thumbnail Image', lambda: self.clipboard.setPixmap(tlabel.layout().itemAt(0).widget().pixmap()))
+        menu.addSeparator()
+        menu.addAction('Optimize Window Extent', self.optimize_extent)
         menu.addAction('Open Video File...', lambda: self.load_view(self.vpath))
         menu.addAction('Open Thumbs Manager', lambda: self.manage_thumbs(cfg['outdir']))
         menu.addSeparator()
         menu.addAction('Quit', lambda: die(0))
-        menu.exec_(self.mapToGlobal(pos))
+        menu.exec_(pos)
 
     def manage_thumbs(self, outdir):
         if self.view_locked:
@@ -684,18 +676,14 @@ class sMainWindow(QMainWindow):
             ts = self.tlabels[self.cur].info[2]
         play_video(self.fname, ts, paused)
 
-    # handle various notifications emitted by widgets down the road
+    # handle various notifications emitted by downstream widgets
     @pyqtSlot(dict)
     def notify_receive(self, event):
         eprint(4, 'got event: ', event)
         if event['type'] == 'set_cursorw':
             self.set_cursorw(event['id'])
-        elif event['type'] == 'optimize_extent':
-            self.optimize_extent()
-        elif event['type'] == 'load_view':
-            self.load_view(self.vpath)
-        elif event['type'] == 'manage_thumbs':
-            self.manage_thumbs(cfg['outdir'])
+        elif event['type'] == 'context_menu':
+            self.show_contextmenu(event['id'], event['pos'])
         elif event['type'] == 'rebuild_view':
             self.rebuild_view()
         elif event['type'] == 'scroll_do_update':
@@ -712,6 +700,7 @@ class sMainWindow(QMainWindow):
         self.setWindowIcon(ffpreview_ico)
         self.resize(500, 300)
         self.setStyleSheet(cfg['appstyle'])
+        self.clipboard = QApplication.clipboard()
         # set up status bar
         statbar = QHBoxLayout()
         self.statdsp = []
@@ -783,7 +772,6 @@ class sMainWindow(QMainWindow):
                 idx = json.load(idxfile)
                 if cfg['verbosity'] > 3:
                     eprint(4, 'idx = ' + json.dumps(idx, indent=2))
-                meta = {'fname': self.fname, 'thdir': self.thdir}
                 for th in idx['th']:
                     if th[0] % 100 == 0:
                         self.show_progress(th[0], idx['count'])
@@ -791,7 +779,7 @@ class sMainWindow(QMainWindow):
                     if thumb.isNull():
                         thumb = dummy_thumb
                     tlabel = tLabel(pixmap=thumb, text=s2hms(th[2]),
-                                    info=th, meta=meta, receptor=self.notify_receive)
+                                    info=th, receptor=self.notify_receive)
                     tlabels.append(tlabel)
         except Exception as e:
             eprint(0, str(e))
@@ -799,7 +787,6 @@ class sMainWindow(QMainWindow):
             # no thumbnails available, make a dummy
             tlabels.append(tLabel(pixmap=dummy_thumb, text=s2hms(str(cfg['start'])),
                             info=[0, 'broken', str(cfg['start'])],
-                            meta={'fname': self.fname, 'thdir': self.thdir},
                             receptor=self.notify_receive))
         return tlabels
 

@@ -563,6 +563,7 @@ class sMainWindow(QMainWindow):
     thdir = None
     cur = 0
     _dbg_num_tlabels = 0
+    view_locked = False
 
     def __new__(cls, *args, title='', **kwargs):
         if cls._instance is None:
@@ -665,6 +666,8 @@ class sMainWindow(QMainWindow):
         menu.exec_(self.mapToGlobal(pos))
 
     def manage_thumbs(self, outdir):
+        if self.view_locked:
+            return
         dlg = tmDialog(self, odir=cfg['outdir'])
         res = dlg.exec_()
         if res == QDialog.Accepted:
@@ -673,6 +676,8 @@ class sMainWindow(QMainWindow):
                 self.load_view(lfile)
 
     def _play_video(self, ts=None, paused=False):
+        if self.view_locked:
+            return
         if ts is None:
             if len(self.tlabels) < 1:
                 return
@@ -799,6 +804,9 @@ class sMainWindow(QMainWindow):
         return tlabels
 
     def load_view(self, fname):
+        if self.view_locked:
+            return
+        self.view_locked = True
         # sanitize file name
         if not fname:
             fname = os.getcwd()
@@ -812,6 +820,7 @@ class sMainWindow(QMainWindow):
             fname, _ = QFileDialog.getOpenFileName(self, 'Open File', fname,
                         'Video Files (*.avi *.mkv *.mp4);;All Files (*)', options=options)
         if not fname or not os.path.exists(fname) or not os.access(fname, os.R_OK):
+            self.view_locked = False
             return
         self.fname = os.path.abspath(fname)
         self.vfile = os.path.basename(self.fname)
@@ -832,6 +841,7 @@ class sMainWindow(QMainWindow):
         self.thinfo, ok = get_thinfo(self.fname, self.thdir)
         if self.thinfo is None:
             self.statdsp[0].setText('Unrecognized file format')
+            self.view_locked = False
             return
         if not ok:
             # (re)generate thumbnails and index file
@@ -865,6 +875,7 @@ class sMainWindow(QMainWindow):
         self.calculate_props()
         self.setMinimumSize(self.tlwidth + self.px, self.tlheight + self.py)
         self.optimize_extent()
+        self.view_locked = False
 
 
 ############################################################
@@ -874,6 +885,8 @@ class sMainWindow(QMainWindow):
 def get_meta(vidfile):
     global proc
     meta = { 'frames': -1, 'duration':-1, 'fps':-1.0 }
+    if proc:
+        return meta, False
     # try ffprobe method
     try:
         cmd = cfg['ffprobe'] + ' -v error -select_streams v:0 -of json -count_packets'
@@ -896,6 +909,9 @@ def get_meta(vidfile):
             eprint(1, stderr.decode())
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
+        if proc:
+            proc.wait()
+            proc = None
     # ffprobe didn't cut it, try ffmpeg instead
     try:
         cmd = cfg['ffmpeg'] + ' -nostats -i "' + vidfile + '"'
@@ -919,12 +935,17 @@ def get_meta(vidfile):
             eprint(1, stderr.decode())
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
+        if proc:
+            proc.wait()
+            proc = None
     return meta, False
 
 # extract thumbnails from video and collect timestamps
 def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     global proc
     rc = False
+    if proc:
+        return thinfo, rc
     pictemplate = '%08d.png'
     cmd = cfg['ffmpeg'] + ' -loglevel info -hide_banner -y'
     if cfg['start']:
@@ -975,6 +996,9 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
             rc = True
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
+        if proc:
+            proc.wait()
+            proc = None
     return thinfo, rc
 
 # open video in player

@@ -555,9 +555,8 @@ class tmDialog(QDialog):
         l = len(dirs)
         if l < 1:
             return
-        mbox = QMessageBox()
+        mbox = QMessageBox(self)
         mbox.setWindowTitle('Remove Thumbnails')
-        mbox.setWindowIcon(self.windowIcon())
         mbox.setIcon(QMessageBox.Warning)
         mbox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
         mbox.setDefaultButton(QMessageBox.Cancel)
@@ -571,14 +570,12 @@ class tmDialog(QDialog):
                     os.rmdir(rm)
                 except Exception as e:
                     eprint(0, str(e))
-                    mbox = QMessageBox()
+                    mbox = QMessageBox(self)
                     mbox.setWindowTitle('Directory Removal Failed')
-                    mbox.setWindowIcon(self.windowIcon())
                     mbox.setIcon(QMessageBox.Critical)
                     mbox.setStandardButtons(QMessageBox.Ok)
                     mbox.setText(re.sub('^\[.*\]\s*', '', str(e)))
                     mbox.exec_()
-
             self.refresh_list()
 
     def get_loadfile(self):
@@ -667,7 +664,9 @@ class sMainWindow(QMainWindow):
                 w.hide()
 
     def esc_action(self):
-        if self.windowState() & Qt.WindowFullScreen:
+        if self.view_locked:
+            self.abort_build()
+        elif self.windowState() & Qt.WindowFullScreen:
             self.toggle_fullscreen()
         else:
             self.closeEvent(None)
@@ -689,7 +688,7 @@ class sMainWindow(QMainWindow):
         self.show_contextmenu(tlabel, self.mapToGlobal(pos))
 
     def show_contextmenu(self, tlabel, pos):
-        menu = QMenu(self)
+        menu = QMenu()
         if not self.view_locked:
             if tlabel:
                 self.set_cursorw(tlabel)
@@ -710,9 +709,9 @@ class sMainWindow(QMainWindow):
             if self.fname:
                 menu.addAction('Force Rebuild', self.force_rebuild)
             menu.addAction('Open Video File...', lambda: self.load_view(self.vpath))
-            menu.addAction('Open Thumbs Manager', lambda: self.manage_thumbs(cfg['outdir']))
+            menu.addAction('Thumbnail Manager', lambda: self.manage_thumbs(cfg['outdir']))
         else:
-            menu.addAction('Abort Operation', kill_proc)
+            menu.addAction('Abort Operation', self.abort_build)
         menu.addSeparator()
         menu.addAction('Quit', lambda: self.closeEvent(None))
         menu.exec_(pos)
@@ -851,10 +850,28 @@ class sMainWindow(QMainWindow):
                             info=[0, 'broken', str(cfg['start'])],
                             receptor=self.notify_receive))
 
+    def abort_build(self):
+        mbox = QMessageBox(self)
+        mbox.setWindowTitle('Abort Process')
+        mbox.setIcon(QMessageBox.Warning)
+        mbox.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        mbox.setDefaultButton(QMessageBox.No)
+        mbox.setText('Aborting now will likely leave you with a broken or '
+                     'incomplete set of thumbnails.\n\nAbort anyway?')
+        if QMessageBox.Yes == mbox.exec_():
+            kill_proc()
+
     def force_rebuild(self):
-        cfg['force'] = True
-        self.load_view(self.fname)
-        cfg['force'] = False
+        mbox = QMessageBox(self)
+        mbox.setWindowTitle('Rebuild Thumbnails')
+        mbox.setIcon(QMessageBox.Warning)
+        mbox.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        mbox.setDefaultButton(QMessageBox.No)
+        mbox.setText('Rebuilding thumbnails may take a while.\n\nAre you sure?')
+        if QMessageBox.Yes == mbox.exec_():
+            cfg['force'] = True
+            self.load_view(self.fname)
+            cfg['force'] = False
 
     def load_view(self, fname):
         if self.view_locked:

@@ -24,7 +24,6 @@ if _PYTHON_VERSION < 3.6:
 import platform
 import io
 import os
-import shutil
 import signal
 import time
 import re
@@ -81,15 +80,22 @@ def str2float(s):
         return float(s)
     return 0.0
 
+def kill_proc(p=None):
+    global proc
+    if p is None:
+        p = proc
+    if p is not None:
+        eprint(1, 'killing subprocess: %s' % p.args)
+        p.terminate()
+        try:
+            p.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            p.kill()
+    return None
+
 def die(rc):
     global proc
-    if proc is not None:
-        eprint(1, 'killing subprocess: %s' % proc.args)
-        proc.terminate()
-        try:
-            proc.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+    proc = kill_proc(proc)
     if '_ffdbg_thread' in globals():
         global _ffdbg_thread, _ffdbg_run
         _ffdbg_run = False
@@ -136,6 +142,9 @@ def configure():
         'platform': platform.system(),
         'env': os.environ.copy(),
         'exec': 'exec',
+        'vformats': '*.3g2 *.3gp *.asf *.avi *.divx *.evo *.f4v *.flv *'
+                    '.m2p *.m2ts *.mkv *.mk3d *.mov *.mp4 *.mpeg *.mpg '
+                    '*.ogg *.ogv *.ogv *.qt *.rmvb *.vob *.webm *.wmv'
     }
     if cfg['platform'] == 'Windows':
         cfg['env']['PATH'] = sys.path[0] + os.pathsep + cfg['env']['PATH']
@@ -379,7 +388,6 @@ class tLabel(QWidget):
             layout.addWidget(tl)
         self.info = info
         self.notify.connect(receptor)
-        self.focus = False
         self.adjustSize()
         self.setMaximumSize(self.width(), self.height())
 
@@ -440,11 +448,11 @@ class tScrollArea(QScrollArea):
         for tl in tlabels:
             layout.removeWidget(tl)
             layout.addWidget(tl, y, x)
+            if progress_cb and cnt % 100 == 0:
+                progress_cb(cnt, l)
             x += 1
             if x >= cfg['grid_columns']:
                 x = 0; y += 1
-            if progress_cb and cnt % 100 == 0:
-                progress_cb(cnt, l)
             cnt += 1
         if y < cfg['grid_rows']:
             cfg['grid_rows'] = y + 1
@@ -467,41 +475,80 @@ class tmDialog(QDialog):
         self.list_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.list_widget.itemDoubleClicked.connect(self.accept)
+        self.list_widget.itemSelectionChanged.connect(self.sel_changed)
         self.btn_layout = QHBoxLayout()
         self.load_button = QPushButton("Load Thumbnails")
+        self.load_button.setIcon(QIcon.fromTheme('document-open'))
         self.load_button.clicked.connect(self.accept)
+        self.load_button.setEnabled(False)
         self.load_button.setDefault(True)
         self.refresh_button = QPushButton("Refresh")
+        self.refresh_button.setIcon(QIcon.fromTheme('view-refresh'))
         self.refresh_button.clicked.connect(self.refresh_list)
+        self.invert_button = QPushButton("Invert Selection")
+        self.invert_button.setIcon(QIcon.fromTheme('document-revert'))
+        self.invert_button.clicked.connect(self.invert_selection)
+        self.selbroken_button = QPushButton("Select Broken")
+        self.selbroken_button.setIcon(QIcon.fromTheme('list-remove'))
+        self.selbroken_button.clicked.connect(self.select_broken)
         self.remove_button = QPushButton("Remove Selected")
+        self.remove_button.setIcon(QIcon.fromTheme('edit-delete'))
         self.remove_button.clicked.connect(self.remove)
+        self.remove_button.setEnabled(False)
         self.close_button = QPushButton("Close")
+        self.close_button.setIcon(QIcon.fromTheme('window-close'))
         self.close_button.clicked.connect(self.reject)
-        self.btn_layout.addWidget(self.load_button)
         self.btn_layout.addWidget(self.refresh_button)
+        self.btn_layout.addWidget(self.invert_button)
+        self.btn_layout.addWidget(self.selbroken_button)
         self.btn_layout.addWidget(self.remove_button)
+        self.btn_layout.addStretch()
+        self.btn_layout.addWidget(QLabel('          '))
+        self.btn_layout.addWidget(self.load_button)
+        self.btn_layout.addWidget(QLabel('     '))
         self.btn_layout.addWidget(self.close_button)
         self.dlg_layout.addWidget(self.list_widget)
         self.dlg_layout.addLayout(self.btn_layout)
+        QShortcut('Del', self).activated.connect(self.remove)
         self.refresh_list()
 
     def accept(self):
         for item in self.list_widget.selectedItems():
             if item.vfile:
                 self.loadfile = item.vfile
-                eprint(1, "open ", item.vfile)
+                eprint(1, "load file ", item.vfile)
                 super().accept()
 
     def refresh_list(self):
         self.ilist = get_indexfiles(self.outdir)
         self.list_widget.clear()
         for entry in self.ilist:
-            item = QListWidgetItem()
-            item.setText(entry['tdir'])
+            item = QListWidgetItem(entry['tdir'])
             if not entry['idx'] or not entry['vfile']:
                 item.setForeground(QColor('red'))
+                item.setBackground(QColor('lightyellow'))
+                font = item.font()
+                font.setStrikeOut(True)
+                item.setFont(font)
             item.vfile = entry['vfile']
             self.list_widget.addItem(item)
+
+    def select_broken(self):
+        for i in range(self.list_widget.count()):
+            self.list_widget.item(i).setSelected(self.list_widget.item(i).vfile is None)
+
+    def sel_changed(self):
+        sel = self.list_widget.selectedItems()
+        nsel = len(sel)
+        self.remove_button.setEnabled(nsel > 0)
+        self.load_button.setEnabled(True if nsel==1 and sel[0].vfile else False)
+
+    def invert_selection(self):
+        sel = self.list_widget.selectedItems()
+        for i in range(self.list_widget.count()):
+            self.list_widget.item(i).setSelected(True)
+        for i in sel:
+            i.setSelected(False)
 
     def remove(self):
         dirs = [sel.text() for sel in self.list_widget.selectedItems()]
@@ -509,16 +556,29 @@ class tmDialog(QDialog):
         if l < 1:
             return
         mbox = QMessageBox()
+        mbox.setWindowTitle('Remove Thumbnails')
+        mbox.setWindowIcon(self.windowIcon())
         mbox.setIcon(QMessageBox.Warning)
         mbox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
         mbox.setDefaultButton(QMessageBox.Cancel)
-        mbox.setWindowTitle('Remove Thumbnails')
-        mbox.setText('Confirm removal of %d folder%s.' % (l, 's' if l>1 else ''))
+        mbox.setText('Confirm removal of %d thumbnail folder%s.' % (l, 's' if l>1 else ''))
         if QMessageBox.Ok == mbox.exec_():
             for d in dirs:
                 rm = os.path.join(self.outdir, d)
-                eprint(1, "remove tree: ", rm)
-                shutil.rmtree(rm)
+                clear_thumbdir(rm)
+                eprint(1, "rmdir: ", rm)
+                try:
+                    os.rmdir(rm)
+                except Exception as e:
+                    eprint(0, str(e))
+                    mbox = QMessageBox()
+                    mbox.setWindowTitle('Directory Removal Failed')
+                    mbox.setWindowIcon(self.windowIcon())
+                    mbox.setIcon(QMessageBox.Critical)
+                    mbox.setStandardButtons(QMessageBox.Ok)
+                    mbox.setText(re.sub('^\[.*\]\s*', '', str(e)))
+                    mbox.exec_()
+
             self.refresh_list()
 
     def get_loadfile(self):
@@ -540,6 +600,7 @@ class sMainWindow(QMainWindow):
     thdir = None
     cur = 0
     _dbg_num_tlabels = 0
+    _dbg_num_qobjects = 0
     view_locked = False
 
     def __new__(cls, *args, title='', **kwargs):
@@ -552,12 +613,9 @@ class sMainWindow(QMainWindow):
         self.init_window(title)
 
     def closeEvent(self, event):
-        self.close()
+        if type(event) == QCloseEvent:
+            event.accept()
         die(0)
-
-    def calculate_props(self):
-        self.px = self.width() - self.scroll.viewport().width()
-        self.py = self.height() - self.scroll.viewport().height()
 
     def optimize_extent(self):
         if self.tlwidth > 0 and self.tlheight > 0:
@@ -568,35 +626,32 @@ class sMainWindow(QMainWindow):
     def rebuild_view(self):
         self.scroll.fill_grid(self.tlabels, self.show_progress)
         self.set_cursor()
-        if _FF_DEBUG:
-            self._dbg_num_tlabels = len(self.findChildren(tLabel))
 
     def clear_view(self):
         self.scroll.clear_grid()
         self.cur = 0
         if self.tlabels:
             self.tlabels.clear()
-        if _FF_DEBUG:
-                self._dbg_num_tlabels = len(self.findChildren(tLabel))
 
     def set_cursor(self, idx=None):
-        if len(self.tlabels) < 1:
+        l = len(self.tlabels)
+        if l < 1:
+            self.cur = 0
             return
-        if idx is None:
-            idx = self.cur
-        self.tlabels[self.cur].setStyleSheet('QLabel {}')
-        if idx < 0:
-            idx = 0
-        elif idx >= len(self.tlabels):
-            idx = len(self.tlabels) - 1
-        self.cur = idx
-        self.tlabels[self.cur].setStyleSheet( 'QLabel {' + cfg['selstyle'] + '}' )
-        self.statdsp[3].setText('%d / %d' % (self.tlabels[self.cur].info[0], self.thinfo['count']))
-        self.scroll.ensureWidgetVisible(self.tlabels[self.cur], 0, 0)
+        try:
+            self.tlabels[self.cur].setStyleSheet('QLabel {}')
+            self.cur = min(max(0, self.cur if idx is None else idx), l - 1)
+            self.tlabels[self.cur].setStyleSheet( 'QLabel {' + cfg['selstyle'] + '}' )
+            self.statdsp[3].setText('%d / %d' % (self.tlabels[self.cur].info[0], l))
+            self.scroll.ensureWidgetVisible(self.tlabels[self.cur], 0, 0)
+        except:
+            pass
 
     def set_cursorw(self, label):
-        idx = self.tlabels.index(label)
-        self.set_cursor(idx)
+        try:
+            self.set_cursor(idx=self.tlabels.index(label))
+        except:
+            pass
 
     def move_cursor(self, amnt):
         self.set_cursor(self.cur + amnt)
@@ -615,7 +670,7 @@ class sMainWindow(QMainWindow):
         if self.windowState() & Qt.WindowFullScreen:
             self.toggle_fullscreen()
         else:
-            die(0)
+            self.closeEvent(None)
 
     def contextMenuEvent(self, event):
         tlabel = None
@@ -635,26 +690,31 @@ class sMainWindow(QMainWindow):
 
     def show_contextmenu(self, tlabel, pos):
         menu = QMenu(self)
-        if tlabel:
-            self.set_cursorw(tlabel)
-            menu.addAction('Play From Here', lambda: self._play_video(ts=tlabel.info[2]))
-        if self.fname:
-            menu.addAction('Play From Start', lambda: self._play_video(ts='0'))
+        if not self.view_locked:
+            if tlabel:
+                self.set_cursorw(tlabel)
+                menu.addAction('Play From Here', lambda: self._play_video(ts=tlabel.info[2]))
+            if self.fname:
+                menu.addAction('Play From Start', lambda: self._play_video(ts='0'))
+            menu.addSeparator()
+            if tlabel:
+                menu.addAction('Copy Timestamp [H:M:S.ms]', lambda: self.clipboard.setText(s2hms(tlabel.info[2])))
+                menu.addAction('Copy Timestamp [S.ms]', lambda: self.clipboard.setText(tlabel.info[2]))
+            if self.fname:
+                menu.addAction('Copy Original Filename', lambda: self.clipboard.setText(self.fname))
+            if tlabel:
+                menu.addAction('Copy Thumb Filename', lambda: self.clipboard.setText(os.path.join(self.thdir, tlabel.info[1])))
+                menu.addAction('Copy Thumbnail Image', lambda: self.clipboard.setPixmap(tlabel.layout().itemAt(0).widget().pixmap()))
+            menu.addSeparator()
+            menu.addAction('Optimize Window Extent', self.optimize_extent)
+            if self.fname:
+                menu.addAction('Force Rebuild', self.force_rebuild)
+            menu.addAction('Open Video File...', lambda: self.load_view(self.vpath))
+            menu.addAction('Open Thumbs Manager', lambda: self.manage_thumbs(cfg['outdir']))
+        else:
+            menu.addAction('Abort Operation', kill_proc)
         menu.addSeparator()
-        if tlabel:
-            menu.addAction('Copy Timestamp [H:M:S.ms]', lambda: self.clipboard.setText(s2hms(tlabel.info[2])))
-            menu.addAction('Copy Timestamp [S.ms]', lambda: self.clipboard.setText(tlabel.info[2]))
-        if self.fname:
-            menu.addAction('Copy Original Filename', lambda: self.clipboard.setText(self.fname))
-        if tlabel:
-            menu.addAction('Copy Thumb Filename', lambda: self.clipboard.setText(os.path.join(self.thdir, tlabel.info[1])))
-            menu.addAction('Copy Thumbnail Image', lambda: self.clipboard.setPixmap(tlabel.layout().itemAt(0).widget().pixmap()))
-        menu.addSeparator()
-        menu.addAction('Optimize Window Extent', self.optimize_extent)
-        menu.addAction('Open Video File...', lambda: self.load_view(self.vpath))
-        menu.addAction('Open Thumbs Manager', lambda: self.manage_thumbs(cfg['outdir']))
-        menu.addSeparator()
-        menu.addAction('Quit', lambda: die(0))
+        menu.addAction('Quit', lambda: self.closeEvent(None))
         menu.exec_(pos)
 
     def manage_thumbs(self, outdir):
@@ -690,14 +750,16 @@ class sMainWindow(QMainWindow):
             self.scroll.do_update(self.tlwidth, self.tlheight)
         elif event['type'] == 'play_video':
             self._play_video(ts=event['ts'], paused=event['pause'])
+        elif event['type'] == '_dbg_count':
+            self._dbg_num_tlabels = len(self.findChildren(tLabel))
+            self._dbg_num_qobjects = len(self.findChildren(QObject))
         else:
             eprint(0, 'event not handled: ', event)
 
     def init_window(self, title):
         self.setWindowTitle(title)
         self.broken_img = sQPixmap(imgdata=_broken_img_png)
-        ffpreview_ico = sQIcon(imgdata=_ffpreview_png)
-        self.setWindowIcon(ffpreview_ico)
+        self.setWindowIcon(sQIcon(imgdata=_ffpreview_png))
         self.resize(500, 300)
         self.setStyleSheet(cfg['appstyle'])
         self.clipboard = QApplication.clipboard()
@@ -735,8 +797,8 @@ class sMainWindow(QMainWindow):
         self.setCentralWidget(main_frame)
         # register shotcuts
         QShortcut('Esc', self).activated.connect(self.esc_action)
-        QShortcut('Ctrl+Q', self).activated.connect(lambda: die(0))
-        QShortcut('Ctrl+W', self).activated.connect(lambda: die(0))
+        QShortcut('Ctrl+Q', self).activated.connect(lambda: self.closeEvent(None))
+        QShortcut('Ctrl+W', self).activated.connect(lambda: self.closeEvent(None))
         QShortcut('F', self).activated.connect(self.toggle_fullscreen)
         QShortcut('Alt+Return', self).activated.connect(self.toggle_fullscreen)
         QShortcut('Ctrl+G', self).activated.connect(self.optimize_extent)
@@ -759,19 +821,19 @@ class sMainWindow(QMainWindow):
 
     def show_progress(self, n, tot):
         self.statdsp[1].setText('%d / %d' % (n, tot))
-        if tot > 0:
-            self.progbar.setValue(int(n * 100 / tot))
+        self.progbar.setValue(int(n * 100 / max(0.01, tot)))
         QApplication.processEvents()
 
     # generate clickable thumbnail labels
-    def make_tlabels(self):
+    def make_tlabels(self, tlabels):
         dummy_thumb = self.broken_img.scaledToWidth(cfg['thumb_width'])
-        tlabels = []
+        tlabels.clear()
         try:
             with open(os.path.join(self.thdir, _FFPREVIEW_IDX), 'r') as idxfile:
                 idx = json.load(idxfile)
                 if cfg['verbosity'] > 3:
                     eprint(4, 'idx = ' + json.dumps(idx, indent=2))
+                self.show_progress(0, idx['count'])
                 for th in idx['th']:
                     if th[0] % 100 == 0:
                         self.show_progress(th[0], idx['count'])
@@ -788,7 +850,11 @@ class sMainWindow(QMainWindow):
             tlabels.append(tLabel(pixmap=dummy_thumb, text=s2hms(str(cfg['start'])),
                             info=[0, 'broken', str(cfg['start'])],
                             receptor=self.notify_receive))
-        return tlabels
+
+    def force_rebuild(self):
+        cfg['force'] = True
+        self.load_view(self.fname)
+        cfg['force'] = False
 
     def load_view(self, fname):
         if self.view_locked:
@@ -802,17 +868,16 @@ class sMainWindow(QMainWindow):
             if not os.path.isdir(fname):
                 fname = os.getcwd()
         if os.path.isdir(fname):
-            options = QFileDialog.Options()
-            options |= QFileDialog.DontUseNativeDialog
             fname, _ = QFileDialog.getOpenFileName(self, 'Open File', fname,
-                        'Video Files (*.avi *.mkv *.mp4);;All Files (*)', options=options)
+                        'Video Files ('+ cfg['vformats'] +');;All Files (*)',
+                        options=QFileDialog.Options()|QFileDialog.DontUseNativeDialog)
         if not fname or not os.path.exists(fname) or not os.access(fname, os.R_OK):
             self.view_locked = False
             return
         self.fname = os.path.abspath(fname)
         self.vfile = os.path.basename(self.fname)
         self.vpath = os.path.dirname(self.fname)
-        self.thdir = os.path.join(cfg['outdir'], self.vfile)
+        self.thdir = os.path.abspath(os.path.join(cfg['outdir'], self.vfile))
         self.setWindowTitle('ffpreview - ' + self.vfile)
         # clear previous view
         for sd in self.statdsp:
@@ -837,9 +902,9 @@ class sMainWindow(QMainWindow):
             self.progbar.show()
             self.thinfo, ok = make_thumbs(fname, self.thinfo, self.thdir, self.show_progress)
         # load thumbnails and make labels
-        self.statdsp[0].setText('Loading ')
+        self.statdsp[0].setText('Loading')
         self.progbar.show()
-        self.tlabels = self.make_tlabels()
+        self.make_tlabels(self.tlabels)
         # roughly fix window geometry
         self.tlwidth = self.tlabels[0].width()
         self.tlheight = self.tlabels[0].height()
@@ -859,7 +924,10 @@ class sMainWindow(QMainWindow):
         self.statdsp[0].setText(s2hms(self.thinfo["duration"]))
         self.statdsp[1].setText(str(self.thinfo["method"]))
         QApplication.processEvents()
-        self.calculate_props()
+        # calculate the actual window extent surplus WRT to viewport
+        self.px = self.width() - self.scroll.viewport().width()
+        self.py = self.height() - self.scroll.viewport().height()
+        # set window size
         self.setMinimumSize(self.tlwidth + self.px, self.tlheight + self.py)
         self.optimize_extent()
         self.view_locked = False
@@ -896,9 +964,7 @@ def get_meta(vidfile):
             eprint(1, stderr.decode())
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
-        if proc:
-            proc.wait()
-            proc = None
+        proc = kill_proc(proc)
     # ffprobe didn't cut it, try ffmpeg instead
     try:
         cmd = cfg['ffmpeg'] + ' -nostats -i "' + vidfile + '"'
@@ -922,9 +988,7 @@ def get_meta(vidfile):
             eprint(1, stderr.decode())
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
-        if proc:
-            proc.wait()
-            proc = None
+        proc = kill_proc(proc)
     return meta, False
 
 # extract thumbnails from video and collect timestamps
@@ -983,9 +1047,7 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
             rc = True
     except Exception as e:
         eprint(0, cmd + '\n  failed: ' + str(e))
-        if proc:
-            proc.wait()
-            proc = None
+        proc = kill_proc(proc)
     return thinfo, rc
 
 # open video in player
@@ -1068,21 +1130,29 @@ def get_thinfo(vfile, thdir):
 
 # clear out thumbnail directory
 def clear_thumbdir(thdir):
+    if os.path.dirname(thdir) != cfg['outdir']:
+        eprint(0, 'clearing of directory %s denied' % thdir)
+        return False
     # prepare thumbnail directory
+    eprint(2, 'clearing out %s' % thdir)
     try:
         os.makedirs(thdir, exist_ok=True)
     except Exception as e:
         eprint(0, str(e))
         return False
-    try:
-        os.unlink(thinfo['idxfile'])
-    except Exception as e:
-        pass
+    f = os.path.join(thdir, _FFPREVIEW_IDX)
+    if os.path.exists(f):
+        try:
+            os.unlink(f)
+        except Exception as e:
+            eprint(0, str(e))
+            pass
     for f in os.listdir(thdir):
         if re.match('^\d{8}\.png$', f):
             try:
                 os.unlink(os.path.join(thdir, f))
             except Exception as e:
+                eprint(0, str(e))
                 pass
 
 # process a single file in console-only mode
@@ -1125,14 +1195,12 @@ def batch_process(fname):
 
 # get list of all index files for thumbnail manager
 def get_indexfiles(path):
-    dirs = []
     flist = []
     for sd in os.listdir(path):
         d = os.path.join(path, sd)
         if not os.path.isdir(d):
             continue
-        entry = { 'tdir': None, 'idx': False, 'vfile': None }
-        entry['tdir'] = sd
+        entry = { 'tdir': sd, 'idx': False, 'vfile': None }
         fidx = os.path.join(d, _FFPREVIEW_IDX)
         if os.path.isfile(fidx):
             entry['idx'] = True
@@ -1144,7 +1212,8 @@ def get_indexfiles(path):
                         entry['vfile'] = opath
         flist.append(entry)
     flist = sorted(flist, key=lambda k: k['tdir'])
-    eprint(3, json.dumps(flist, indent=2))
+    if cfg['verbosity'] > 2:
+        eprint(3, json.dumps(flist, indent=2))
     return flist
 
 ############################################################
@@ -1155,7 +1224,8 @@ def main():
     global proc, cfg
     proc = None
     cfg = configure()
-    eprint(3, 'cfg = ' + json.dumps(cfg, indent=2))
+    if cfg['verbosity'] > 2:
+        eprint(3, 'cfg = ' + json.dumps(cfg, indent=2))
 
     signal.signal(signal.SIGINT, sig_handler)
     signal.signal(signal.SIGTERM, sig_handler)
@@ -1188,15 +1258,29 @@ def main():
         import threading, resource, gc
         global _ffdbg_thread, _ffdbg_run
         gc.set_debug(gc.DEBUG_SAVEALL)
+
+        class _dbgProxy(QObject):
+            notify = pyqtSignal(dict)
+            def __init__(self, *args, receptor=None, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.notify.connect(receptor)
+            def ping(self):
+                self.notify.emit({'type': '_dbg_count'})
+
         def _ffdbg_update(*args):
             tstart = time.time()
+            dbg_proxy = _dbgProxy(receptor=root.notify_receive)
             def p(*args):
                 print(*args, file=sys.stderr)
             while _ffdbg_run:
-                time.sleep(1.5)
+                gc.collect()
+                time.sleep(0.5)
+                dbg_proxy.ping()
+                time.sleep(0.5)
                 p('----- %.3f -----' % (time.time()-tstart))
                 p('max rss:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, 'KiB')
-                p('tLabels:', args[0]._dbg_num_tlabels)
+                p('tLabel :', args[0]._dbg_num_tlabels)
+                p('QObject:', args[0]._dbg_num_qobjects)
                 p('gc cnt :', gc.get_count())
             p('gc gen0:', gc.get_stats()[0])
             p('gc gen1:', gc.get_stats()[1])
@@ -1211,6 +1295,8 @@ def main():
         root.manage_thumbs(cfg['outdir'])
     else:
         root.load_view(cfg['vid'][0])
+        # reset force flag to avoid accidental rebuild for every file
+        cfg['force'] = False
     die(app.exec_())
 
 # run application

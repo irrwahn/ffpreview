@@ -1090,6 +1090,7 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
             eprint(1, ebuf)
         thinfo['count'] = cnt
         with open(os.path.join(thdir, _FFPREVIEW_IDX), 'w') as idxfile:
+            thinfo['date'] = int(time.time())
             json.dump(thinfo, idxfile, indent=2)
             rc = True
     except Exception as e:
@@ -1169,7 +1170,6 @@ def get_thinfo(vfile, thdir):
     if not ok:
         return None, False
     thinfo.update(meta)
-    thinfo['date'] = int(time.time())
     if not cfg['force']:
         chk = chk_idxfile(thinfo, thdir)
         if chk:

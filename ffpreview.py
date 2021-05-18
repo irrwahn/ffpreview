@@ -86,6 +86,15 @@ def hr_size(sz):
         i += 1
     return '%.1f %s' % (sz, ['', 'KiB', 'MiB', 'GiB', 'TiB'][i])
 
+def ppdict(dic, excl=[]):
+    s = ''
+    with io.StringIO() as sf:
+        for k, v in dic.items():
+            if v is not None and not k in excl:
+                print(k+':', v, file=sf)
+        s = sf.getvalue()
+    return s.strip()
+
 def kill_proc(p=None):
     global proc
     if p is None:
@@ -533,23 +542,15 @@ class tmDialog(QDialog):
                 super().accept()
 
     def refresh_list(self):
-        def idx2tt(idx):
-            with io.StringIO() as sf:
-                for k, v in idx.items():
-                    if v is not None and k != 'count' and k != 'date':
-                        print(k+':', v, file=sf)
-                s = sf.getvalue()
-            return s if s else '(not available)'
-
         self.ilist = get_indexfiles(self.outdir)
         self.tree_widget.clear()
         ncols = self.tree_widget.columnCount()
         for entry in self.ilist:
             item = QTreeWidgetItem([entry['tdir'], str(entry['idx']['count']), hr_size(entry['size']),
                                     time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry['idx']['date']))])
-            item.setToolTip(0, idx2tt(entry['idx']))
-            item.setTextAlignment(1, Qt.AlignRight)
-            item.setTextAlignment(2, Qt.AlignRight)
+            item.setToolTip(0, ppdict(entry['idx'], ['th']))
+            item.setTextAlignment(1, Qt.AlignRight|Qt.AlignVCenter)
+            item.setTextAlignment(2, Qt.AlignRight|Qt.AlignVCenter)
             if not entry['idx'] or not entry['vfile']:
                 font = item.font(0)
                 font.setItalic(True)
@@ -605,7 +606,7 @@ class tmDialog(QDialog):
                     mbox.setWindowTitle('Directory Removal Failed')
                     mbox.setIcon(QMessageBox.Critical)
                     mbox.setStandardButtons(QMessageBox.Ok)
-                    mbox.setText(re.sub('^\[.*\]\s*', '', str(e)))
+                    mbox.setText(re.sub('^\[.*\]\s*', '', str(e)).replace(':', ':\n\n', 1))
                     mbox.exec_()
             self.refresh_list()
 
@@ -799,7 +800,7 @@ class sMainWindow(QMainWindow):
         for i in range(4):
             s = QLabel('')
             s.resize(100, 20)
-            s.setStyleSheet("QLabel {margin: 0px 2px 0px 2px;}");
+            s.setStyleSheet('QLabel {margin: 0px 2px 0px 2px;}');
             self.statdsp.append(s)
             statbar.addWidget(s)
         self.progbar = QProgressBar()
@@ -898,13 +899,17 @@ class sMainWindow(QMainWindow):
             kill_proc()
 
     def force_rebuild(self):
-        mbox = QMessageBox(self)
-        mbox.setWindowTitle('Rebuild Thumbnails')
-        mbox.setIcon(QMessageBox.Warning)
-        mbox.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        mbox.setDefaultButton(QMessageBox.No)
-        mbox.setText('Rebuilding thumbnails may take a while.\n\nAre you sure?')
-        if QMessageBox.Yes == mbox.exec_():
+        if self.thinfo['duration'] > 300:
+            mbox = QMessageBox(self)
+            mbox.setWindowTitle('Rebuild Thumbnails')
+            mbox.setIcon(QMessageBox.Warning)
+            mbox.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            mbox.setDefaultButton(QMessageBox.No)
+            mbox.setText('Rebuilding thumbnails may take a while.\n\nAre you sure?')
+            rebuild = (mbox.exec_() == QMessageBox.Yes)
+        else:
+            rebuild = True
+        if rebuild:
             cfg['force'] = True
             self.load_view(self.fname)
             cfg['force'] = False
@@ -935,6 +940,7 @@ class sMainWindow(QMainWindow):
         # clear previous view
         for sd in self.statdsp:
             sd.setText('')
+            sd.setToolTip('')
         self.statdsp[0].setText('Clearing view')
         QApplication.processEvents()
         self.clear_view()
@@ -965,9 +971,11 @@ class sMainWindow(QMainWindow):
         h = self.tlheight * cfg['grid_rows'] + self.py
         self.resize(w, h)
         # build thumbnail view
+        tooltip = ppdict(self.thinfo, ['th'])
+        for sd in self.statdsp:
+            self.statdsp[2].setText('')
+            sd.setToolTip(tooltip)
         self.statdsp[0].setText('Building view')
-        self.statdsp[1].setText('')
-        self.statdsp[2].setText('')
         QApplication.processEvents()
         self.rebuild_view()
         self.set_cursor(0)
@@ -1120,8 +1128,9 @@ def play_video(filename, start='0', paused=False):
 
 # check validity of existing index file
 def chk_idxfile(thinfo, thdir):
+    idxpath = os.path.join(thdir, _FFPREVIEW_IDX)
     try:
-        with open(os.path.join(thdir, _FFPREVIEW_IDX), 'r') as idxfile:
+        with open(idxpath, 'r') as idxfile:
             idx = json.load(idxfile)
             if idx['name'] != thinfo['name']:
                 return False
@@ -1148,6 +1157,7 @@ def chk_idxfile(thinfo, thdir):
                     return False
             return idx
     except Exception as e:
+        eprint(1, idxpath, str(e))
         pass
     return False
 
@@ -1258,13 +1268,18 @@ def get_indexfiles(path):
         fidx = os.path.join(d, _FFPREVIEW_IDX)
         if os.path.isfile(fidx):
             with open(fidx, 'r') as idxfile:
-                idx = json.load(idxfile)
-                idx['th'] = None
-                entry['idx'] = idx.copy()
-                if 'name' in idx and 'path' in idx:
-                    opath = os.path.join(idx['path'], idx['name'])
-                    if os.path.isfile(opath):
-                        entry['vfile'] = opath
+                try:
+                    idx = json.load(idxfile)
+                except Exception as e:
+                    eprint(1, fidx, str(e))
+                    idx = {}
+                else:
+                    idx['th'] = None
+                    entry['idx'] = idx.copy()
+                    if 'name' in idx and 'path' in idx:
+                        opath = os.path.join(idx['path'], idx['name'])
+                        if os.path.isfile(opath):
+                            entry['vfile'] = opath
         sz = cnt = 0
         for f in os.listdir(d):
             if re.match('^\d{8}\.png$', f):

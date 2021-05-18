@@ -79,6 +79,13 @@ def str2float(s):
         return float(s)
     return 0.0
 
+def hr_size(sz):
+    i = 0
+    while sz >= 1024:
+        sz /= 1024
+        i += 1
+    return '%.1f %s' % (sz, ['', 'KiB', 'MiB', 'GiB', 'TiB'][i])
+
 def kill_proc(p=None):
     global proc
     if p is None:
@@ -468,7 +475,7 @@ class tmDialog(QDialog):
         super().__init__(*args, **kwargs)
         self.outdir = odir
         self.setWindowTitle("Thumbnail Manager")
-        self.resize(600, 700)
+        self.resize(800, 700)
         self.dlg_layout = QVBoxLayout(self)
         self.loc_label = QLabel(text='Index of ' + self.outdir + '/')
         self.tree_widget = QTreeWidget()
@@ -476,13 +483,10 @@ class tmDialog(QDialog):
         self.tree_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.tree_widget.setRootIsDecorated(False)
         self.tree_widget.setColumnCount(4)
-        self.tree_widget.setHeaderLabels(['Name', 'Duration', '# Thumbs', 'Build Date'])
-        self.tree_widget.setColumnWidth(0, 600)
-        self.tree_widget.setColumnWidth(1, 80)
-        self.tree_widget.setColumnWidth(2, 80)
-        self.tree_widget.setColumnWidth(3, 180)
+        self.tree_widget.setHeaderLabels(['Name', 'Count', 'Size', 'Date Modified'])
         self.tree_widget.itemDoubleClicked.connect(self.accept)
         self.tree_widget.itemSelectionChanged.connect(self.sel_changed)
+        self.tree_widget.setAlternatingRowColors(True)
         self.btn_layout = QHBoxLayout()
         self.load_button = QPushButton("Load Thumbnails")
         self.load_button.setIcon(QIcon.fromTheme('document-open'))
@@ -518,6 +522,7 @@ class tmDialog(QDialog):
         self.dlg_layout.addWidget(self.tree_widget)
         self.dlg_layout.addLayout(self.btn_layout)
         QShortcut('Del', self).activated.connect(self.remove)
+        QShortcut('F5', self).activated.connect(self.refresh_list)
         self.refresh_list()
 
     def accept(self):
@@ -528,39 +533,40 @@ class tmDialog(QDialog):
                 super().accept()
 
     def refresh_list(self):
-        def d2tt(d):
-            sf = io.StringIO()
-            for k, v in d.items():
-                if v is not None and k != 'duration' and k != 'count' and k != 'date':
-                    print(k+':', v, file=sf)
-            s = sf.getvalue()
-            sf.close()
-            return s
+        def idx2tt(idx):
+            with io.StringIO() as sf:
+                for k, v in idx.items():
+                    if v is not None and k != 'count' and k != 'date':
+                        print(k+':', v, file=sf)
+                s = sf.getvalue()
+            return s if s else '(not available)'
 
         self.ilist = get_indexfiles(self.outdir)
         self.tree_widget.clear()
+        ncols = self.tree_widget.columnCount()
         for entry in self.ilist:
-            item = QTreeWidgetItem([entry['tdir'],
-                                    s2hms(entry['idx']['duration'], False),
-                                    str(entry['idx']['count']),
-                                    time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry['idx']['date']))
-                                    ])
-            item.setToolTip(0, d2tt(entry['idx']))
+            item = QTreeWidgetItem([entry['tdir'], str(entry['idx']['count']), hr_size(entry['size']),
+                                    time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry['idx']['date']))])
+            item.setToolTip(0, idx2tt(entry['idx']))
             item.setTextAlignment(1, Qt.AlignRight)
             item.setTextAlignment(2, Qt.AlignRight)
             if not entry['idx'] or not entry['vfile']:
-                item.setForeground(0, QColor('red'))
-                item.setBackground(0, QColor('lightyellow'))
                 font = item.font(0)
-                font.setStrikeOut(True)
-                item.setFont(0, font)
+                font.setItalic(True)
+                for col in range(ncols):
+                    item.setForeground(col, QColor('red'))
+                    item.setBackground(col, QColor('lightyellow'))
+                    item.setFont(col, font)
+                item.setIcon(0, QIcon.fromTheme('dialog-warning'))
             item.vfile = entry['vfile']
             self.tree_widget.addTopLevelItem(item)
+        for col in range(ncols):
+            self.tree_widget.resizeColumnToContents(col)
 
     def select_broken(self):
         for i in range(self.tree_widget.topLevelItemCount()):
             item = self.tree_widget.topLevelItem(i)
-            item.setSelected(item.vfile is None)
+            item.setSelected(not item.vfile)
 
     def sel_changed(self):
         sel = self.tree_widget.selectedItems()
@@ -968,8 +974,8 @@ class sMainWindow(QMainWindow):
         self.progbar.hide()
         QApplication.processEvents()
         # final window touch-up
-        self.statdsp[0].setText(s2hms(self.thinfo["duration"]))
-        self.statdsp[1].setText(str(self.thinfo["method"]))
+        self.statdsp[0].setText(s2hms(self.thinfo['duration']))
+        self.statdsp[1].setText(str(self.thinfo['method']))
         QApplication.processEvents()
         # calculate the actual window extent surplus WRT to viewport
         self.px = self.width() - self.scroll.viewport().width()
@@ -1027,7 +1033,7 @@ def get_meta(vidfile):
                 if m:
                     meta['frames'] = int(m.group(1))
                     d = hms2s(m.group(2))
-                    meta['duration'] = int(d)
+                    meta['duration'] = d
                     meta['fps'] = round(meta['frames'] / d, 2)
                     return meta, True
         else:
@@ -1248,7 +1254,7 @@ def get_indexfiles(path):
         d = os.path.join(path, sd)
         if not os.path.isdir(d):
             continue
-        entry = { 'tdir': sd, 'idx': False, 'vfile': None }
+        entry = { 'tdir': sd, 'idx': None, 'vfile': '', 'size': 0 }
         fidx = os.path.join(d, _FFPREVIEW_IDX)
         if os.path.isfile(fidx):
             with open(fidx, 'r') as idxfile:
@@ -1259,6 +1265,17 @@ def get_indexfiles(path):
                     opath = os.path.join(idx['path'], idx['name'])
                     if os.path.isfile(opath):
                         entry['vfile'] = opath
+        sz = cnt = 0
+        for f in os.listdir(d):
+            if re.match('^\d{8}\.png$', f):
+                cnt += 1
+                try:
+                    sz += os.path.getsize(os.path.join(d, f))
+                except:
+                    pass
+        entry['size'] = sz
+        if not entry['idx']:
+            entry['idx'] = { 'count': cnt, 'date': int(os.path.getmtime(d)) }
         flist.append(entry)
     flist = sorted(flist, key=lambda k: k['tdir'])
     if cfg['verbosity'] > 2:

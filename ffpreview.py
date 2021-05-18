@@ -1212,15 +1212,81 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
 def play_video(filename, start='0', paused=False):
     if not filename:
         return
-    if paused and cfg['plpaused']:
-        cmd = cfg['plpaused']
-    else:
-        cmd = cfg['player']
-    cmd = cmd.replace('%t', '"' + start + '"')
-    cmd = cmd.replace('%f', '"' + filename + '"')
-    eprint(2, cmd)
-    Popen(cfg['exec'] + ' ' + cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL,
-            env=cfg['env'], start_new_session=True)
+
+    # keep this for Windows, for the time being
+    if cfg['platform'] == 'Windows':
+        if paused and cfg['plpaused']:
+            cmd = cfg['plpaused']
+        else:
+            cmd = cfg['player']
+        cmd = cmd.replace('%t', '"' + start + '"')
+        cmd = cmd.replace('%f', '"' + filename + '"')
+        eprint(2, cmd)
+        Popen(cfg['exec'] + ' ' + cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL,
+                env=cfg['env'], start_new_session=True)
+        return
+
+    # Linux; Darwin?
+    # double fork to avoid accumulating zombie processes
+    try:
+        pid = os.fork()
+        if pid > 0:
+            eprint(2, '1st fork ok')
+            status = os.waitid(os.P_PID, pid, os.WEXITED)
+            if status.si_status:
+                eprint(0, 'child exit error:', status)
+            else:
+                eprint(2, 'child exit ok')
+            return  # parent: back to business
+    except Exception as e:
+        eprint(0, '1st fork failed:', str(e))
+        os._exit(1)
+    # child
+    # become session leader and fork a second time
+    os.setsid()
+    try:
+        pid = os.fork()
+        if pid > 0:
+            eprint(2, '2nd fork ok')
+            os._exit(0) # child done
+    except Exception as e:
+        eprint(0, '2nd fork failed:', str(e))
+        os._exit(1)
+    # grandchild
+    # restore default signal handlers
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    signal.signal(signal.SIGHUP, signal.SIG_DFL)
+    signal.signal(signal.SIGQUIT, signal.SIG_DFL)
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    # prepare argument vector
+    cmd = cfg['plpaused'] if paused and cfg['plpaused'] else cfg['player']
+    args = cmd.split(' ') # FIXME: suboptimal splitting
+    for i in range(len(args)):
+        args[i] = args[i].replace('%t', start).replace('%f', filename)
+    cstr = '[ '
+    for a in args:
+        cstr += "'" + a + "', "
+    eprint(1, 'args =', cstr + ']')
+    # close all fds and redirect stdin, stdout and stderr to /dev/null
+    sys.stdout.flush()
+    sys.stderr.flush()
+    try:
+        maxfd = os.sysconf('SC_OPEN_MAX')
+    except:
+        maxfd = 1024
+    for fd in range(maxfd):
+        try:
+            os.close(fd)
+        except:
+            pass
+    os.open(os.devnull, os.O_RDWR)
+    os.dup2(0, 1)
+    os.dup2(0, 2)
+    # execute command
+    os.execvpe(args[0], args, cfg['env'])
+    os._exit(255)
+
 
 # check validity of existing index file
 def chk_idxfile(thinfo, thdir):

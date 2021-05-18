@@ -1162,6 +1162,7 @@ def get_thinfo(vfile, thdir):
         'scene_thresh': cfg['scene_thresh'],
         'customvf': cfg['customvf'],
         'date': 0,
+        'ffpreview': _FFPREVIEW_VERSION,
         'th': []
     }
     meta, ok = get_meta(vfile)
@@ -1299,7 +1300,7 @@ def main():
         os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
     app = QApplication(sys.argv)
     app.setApplicationName('ffpreview')
-    root = sMainWindow(title='ffpreview')
+    root = sMainWindow(title='ffpreview %s' % _FFPREVIEW_VERSION)
 
     # start console debugging thread, if _FF_DEBUG is set
     if _FF_DEBUG:

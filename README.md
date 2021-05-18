@@ -90,6 +90,18 @@ window controls:
   Home, End,
   TAB, Shift+TAB    move highlighted selection marker
 ```
+### Notes
+
+* In GUI mode, the --force flag is reset after the first view is
+  loaded, to prevent accidental rebuilds for subsequently opened
+  files. A forced rebuild can be initiated anytime via the context
+  menu. In batch mode the --force flag is applied to all input files.
+
+* The thumbnail manager, accessible via context menu or command line
+  option, provides a simple way to keep track of saved previews
+  thumbnails and allows for easy loading of previews or deletion of
+  broken/unwanted preview folders.
+
 ### Examples
 
 #### Start ffpreview with file open dialog:

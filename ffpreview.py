@@ -55,14 +55,13 @@ def hms2s(ts):
         h = m; m = s; s = float(t[i])
     return float(h * 3600) + m * 60 + s
 
-def s2hms(ts):
+def s2hms(ts, frac=True):
     s, ms = divmod(float(ts), 1.0)
     m, s = divmod(s, 60)
     h, m = divmod(m, 60)
-    if h > 0:
-        res = '%02d:%02d:%02d%s' % (h, m, s, ('%.3f' % ms).lstrip('0'))
-    else:
-        res = '%02d:%02d%s' % (m, s, ('%.3f' % ms).lstrip('0'))
+    res = '' if h < 1 else '%02d:' % h
+    res += '%02d:%02d' % (m, s)
+    res += '' if not frac else ('%.3f' % ms).lstrip('0')
     return res
 
 def str2bool(s):
@@ -471,11 +470,19 @@ class tmDialog(QDialog):
         self.setWindowTitle("Thumbnail Manager")
         self.resize(600, 700)
         self.dlg_layout = QVBoxLayout(self)
-        self.list_widget = QListWidget()
-        self.list_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.list_widget.itemDoubleClicked.connect(self.accept)
-        self.list_widget.itemSelectionChanged.connect(self.sel_changed)
+        self.loc_label = QLabel(text='Index of ' + self.outdir + '/')
+        self.tree_widget = QTreeWidget()
+        self.tree_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.tree_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.tree_widget.setRootIsDecorated(False)
+        self.tree_widget.setColumnCount(4)
+        self.tree_widget.setHeaderLabels(['Name', 'Duration', '# Thumbs', 'Build Date'])
+        self.tree_widget.setColumnWidth(0, 600)
+        self.tree_widget.setColumnWidth(1, 80)
+        self.tree_widget.setColumnWidth(2, 80)
+        self.tree_widget.setColumnWidth(3, 180)
+        self.tree_widget.itemDoubleClicked.connect(self.accept)
+        self.tree_widget.itemSelectionChanged.connect(self.sel_changed)
         self.btn_layout = QHBoxLayout()
         self.load_button = QPushButton("Load Thumbnails")
         self.load_button.setIcon(QIcon.fromTheme('document-open'))
@@ -507,51 +514,69 @@ class tmDialog(QDialog):
         self.btn_layout.addWidget(self.load_button)
         self.btn_layout.addWidget(QLabel('     '))
         self.btn_layout.addWidget(self.close_button)
-        self.dlg_layout.addWidget(self.list_widget)
+        self.dlg_layout.addWidget(self.loc_label)
+        self.dlg_layout.addWidget(self.tree_widget)
         self.dlg_layout.addLayout(self.btn_layout)
         QShortcut('Del', self).activated.connect(self.remove)
         self.refresh_list()
 
     def accept(self):
-        for item in self.list_widget.selectedItems():
+        for item in self.tree_widget.selectedItems():
             if item.vfile:
                 self.loadfile = item.vfile
                 eprint(1, "load file ", item.vfile)
                 super().accept()
 
     def refresh_list(self):
+        def d2tt(d):
+            sf = io.StringIO()
+            for k, v in d.items():
+                if v is not None and k != 'duration' and k != 'count' and k != 'date':
+                    print(k+':', v, file=sf)
+            s = sf.getvalue()
+            sf.close()
+            return s
+
         self.ilist = get_indexfiles(self.outdir)
-        self.list_widget.clear()
+        self.tree_widget.clear()
         for entry in self.ilist:
-            item = QListWidgetItem(entry['tdir'])
+            item = QTreeWidgetItem([entry['tdir'],
+                                    s2hms(entry['idx']['duration'], False),
+                                    str(entry['idx']['count']),
+                                    time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry['idx']['date']))
+                                    ])
+            item.setToolTip(0, d2tt(entry['idx']))
+            item.setTextAlignment(1, Qt.AlignRight)
+            item.setTextAlignment(2, Qt.AlignRight)
             if not entry['idx'] or not entry['vfile']:
-                item.setForeground(QColor('red'))
-                item.setBackground(QColor('lightyellow'))
-                font = item.font()
+                item.setForeground(0, QColor('red'))
+                item.setBackground(0, QColor('lightyellow'))
+                font = item.font(0)
                 font.setStrikeOut(True)
-                item.setFont(font)
+                item.setFont(0, font)
             item.vfile = entry['vfile']
-            self.list_widget.addItem(item)
+            self.tree_widget.addTopLevelItem(item)
 
     def select_broken(self):
-        for i in range(self.list_widget.count()):
-            self.list_widget.item(i).setSelected(self.list_widget.item(i).vfile is None)
+        for i in range(self.tree_widget.topLevelItemCount()):
+            item = self.tree_widget.topLevelItem(i)
+            item.setSelected(item.vfile is None)
 
     def sel_changed(self):
-        sel = self.list_widget.selectedItems()
+        sel = self.tree_widget.selectedItems()
         nsel = len(sel)
         self.remove_button.setEnabled(nsel > 0)
         self.load_button.setEnabled(True if nsel==1 and sel[0].vfile else False)
 
     def invert_selection(self):
-        sel = self.list_widget.selectedItems()
-        for i in range(self.list_widget.count()):
-            self.list_widget.item(i).setSelected(True)
+        sel = self.tree_widget.selectedItems()
+        for i in range(self.tree_widget.topLevelItemCount()):
+            self.tree_widget.topLevelItem(i).setSelected(True)
         for i in sel:
             i.setSelected(False)
 
     def remove(self):
-        dirs = [sel.text() for sel in self.list_widget.selectedItems()]
+        dirs = [sel.text(0) for sel in self.tree_widget.selectedItems()]
         l = len(dirs)
         if l < 1:
             return
@@ -794,6 +819,11 @@ class sMainWindow(QMainWindow):
         main_layout.addWidget(self.scroll)
         main_layout.addLayout(statbar)
         self.setCentralWidget(main_frame)
+        # set tooltip colors
+        palette = QToolTip.palette()
+        palette.setColor(QPalette.ToolTipBase,QColor('#fffff0'))
+        palette.setColor(QPalette.ToolTipText,QColor('#606060'))
+        QToolTip.setPalette(palette)
         # register shotcuts
         QShortcut('Esc', self).activated.connect(self.esc_action)
         QShortcut('Ctrl+Q', self).activated.connect(lambda: self.closeEvent(None))
@@ -1220,9 +1250,10 @@ def get_indexfiles(path):
         entry = { 'tdir': sd, 'idx': False, 'vfile': None }
         fidx = os.path.join(d, _FFPREVIEW_IDX)
         if os.path.isfile(fidx):
-            entry['idx'] = True
             with open(fidx, 'r') as idxfile:
                 idx = json.load(idxfile)
+                idx['th'] = None
+                entry['idx'] = idx.copy()
                 if 'name' in idx and 'path' in idx:
                     opath = os.path.join(idx['path'], idx['name'])
                     if os.path.isfile(opath):

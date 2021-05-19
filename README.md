@@ -26,9 +26,9 @@ for that purpose too, should `ffprobe` fail.
 ## Configuration
 
 With few exceptions all options available from the command line (see
-below) plus the invocations to start external programs can be specified
-in the configuration file, for details see the `ffpreview.conf.sample`
-example configuration.
+below), plus the incantations to start external programs, can be specified
+in the configuration file. For more detailed information please refer to
+the `ffpreview.conf.sample` example configuration file.
 
 
 ## Usage

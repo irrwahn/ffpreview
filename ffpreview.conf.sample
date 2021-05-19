@@ -1,66 +1,92 @@
 # Ffpreview example configuration file
+#
+# Copy this file to "ffppreview.conf" and make the desired changes.
 
 [Default]
 
 # Output directory path.
-# A separate subdirectory is created for each video file.
+# In this location a subdirectory named "ffpreview_thumbs" will be
+# created, where a separate subdirectory is placed for each individual
+# video file processed. The default is to try to locate a suitable
+# temporary location, depending on the operating system.
+# Example:
+#   outdir=/ext/data
+# will produce the following directory structure:
+#   /
+#   +--ext
+#   |  +--data
+#   |  |  +--ffpreview_thumbs
+#   |  |  |  +--video1.mp4
+#   |  |  |  +--another video.mkv
+#   |  |  |  +--...
 outdir=
 
-# Target width in pixels for thumbnails.
-thumb_width=128
+# Width in pixels for generated thumbnails.
+thumb_width=192
 
-# Initial thumbnail grid geometry, columns [x rows].
-grid=5x5
+# Initial thumbnail grid geometry, format: Columns[xRows].
+grid=5x4
 
-# Application and selected thumbnail style in CSS syntax.
+# Application and selected thumbnail style in basic CSS syntax.
 # Examples:
-# Standard theme example:
+#  Standard theme example:
 #   appstyle=
 #   selstyle=background-color: lightblue;
-# Dark theme example:
+#  Dark theme example:
 #   appstyle= * {background-color: #181818; color: #b0b0b0;}
-#     :selected {background-color: #4a90d9; color: #f4f8fd;}
+#             :selected {background-color: #4a90d9; color: #f4f8fd;}
 #   selstyle= background-color: #4a90d9; color: #f4f8fd;
 appstyle=
 selstyle=background-color: lightblue;
 
-# Path to ffprobe.
+# Path to ffprobe executable.
 ffprobe=ffprobe
 
-# Path to ffmpeg.
+# Path to ffmpeg executable.
 ffmpeg=ffmpeg
 
-# Video player invocation. The %f placeholder is replaced by the
-# actual video file name.
+# Video player command. The %t and %f placeholders are replaced by
+# the start timestamp and the video file name, respectively.
+# NOTE: Arguments with embedded spaces must be quoted, embedded quotes
+# must be backslash-escaped, e.g.:  "-foo=bar baz"  "-quux=abc\"def"
 # Examples:
 #  player=vlc --start-time=%t %f
 #  player=ffplay -ss %t %f
 #  player=mpv --no-ordered-chapters --start=%t %f
 player=mpv --no-ordered-chapters --start=%t %f
 
-# Video player invocation in paused mode. The %t and %f placeholders
-# are replaced by start timestamp and video file name, respectively.
+# As above, but for player invocation in paused mode.
+# HINT: For players that do not support starting in paused mode simply
+# make this the same as above.
 # Examples:
 #  plpaused=vlc --start-time=%t --start-paused %f
 #  plpaused=ffplay -ss %t %f
 #  plpaused=mpv --no-ordered-chapters --start=%t --pause %f
 plpaused=mpv --no-ordered-chapters --start=%t --pause %f
 
-# Always rebuild thumbnails, disregarding any existing files.
+# Always rebuild, deleting any previously created thumbnails.
+# NOTE: In GUI (not batch!) mode, this is internally reset to "False"
+# after the first file has been processed.
 force=False
 
-# Reuse existing index file found in the thumbnail directory, if
-# possible. If 'force' is true, this option is ignored.
-# NOTE: Even if this option is not set, ffpreview attempts to reuse
-# existing files, provided all important parameters still apply.
+# Reuse the settings found in an existing index file in the thumbnail
+# directory, if at all possible. This option is ignored in 'force' mode.
+# NOTE: Even if this option is set to "False', ffpreview tries to reuse
+# existing files, provided all essential parameters still match the
+# current settings.
 reuse=False
 
 # Start and end timestamp of time interval to produce thumbnails for.
-# Format: [[hours:]minutes:]seconds.fractions
+# Leave empty to always process entire files.
+# Format: [[hours:]minutes:]seconds[.fractions]
+# Example:
+#  start=3:42.07
+#  denotes a start position 3 minutes, 42 seconds and 70 milliseconds in.
 start=
 end=
 
-# Thumbnail sampling method. Valid methods are:
+# Thumbnail sampling method.
+# Supported methods:
 #  iframe   - automatic I-Frame detection (the default)
 #  scene    - scene change detection, see 'scene_thresh'
 #  skip     - skip number of frames between thumbnails, see 'frame_skip'
@@ -68,17 +94,19 @@ end=
 #  customvf - custom ffmpeg filter string, see 'customvf'
 method=iframe
 
-# Detection threshold for method 'scene'.
+# Scene change detection threshold for method 'scene'.
 scene_thresh=0.2
 
 # Number of frames to skip for method 'skip'.
 frame_skip=200
 
-# Number of seconds to skip for method 'time'.
+# Sample interval in seconds for method 'time'.
 time_skip=60
 
-# Custom ffmpeg filter string for method 'customvf'.
-# For more information on filter expressions refer to the ffmpeg man page.
+# Custom ffmpeg filter string for method 'customvf'. The configured
+# expression is passed verbatim as argument to ffmpeg's "-vf" option.
+# This is an advanced setting. Please consult the ffmpeg documentation
+# to learn more about video filter expressions.
 customvf=scdet=s=1:t=12
 
 # EOF

@@ -929,11 +929,6 @@ class sMainWindow(QMainWindow):
         main_layout.addWidget(self.scroll)
         main_layout.addLayout(statbar)
         self.setCentralWidget(main_frame)
-        # set tooltip colors
-        palette = QToolTip.palette()
-        palette.setColor(QPalette.ToolTipBase,QColor('#fffff0'))
-        palette.setColor(QPalette.ToolTipText,QColor('#606060'))
-        QToolTip.setPalette(palette)
         # register shotcuts
         QShortcut('Esc', self).activated.connect(self.esc_action)
         QShortcut('Ctrl+Q', self).activated.connect(lambda: self.closeEvent(None))

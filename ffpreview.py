@@ -840,10 +840,11 @@ class sMainWindow(QMainWindow):
                 menu.addAction('Copy Thumb Filename', lambda: self.clipboard.setText(os.path.join(self.thdir, tlabel.info[1])))
                 menu.addAction('Copy Thumbnail Image', lambda: self.clipboard.setPixmap(tlabel.layout().itemAt(0).widget().pixmap()))
             menu.addSeparator()
-            menu.addAction('Optimize Window Extent', self.optimize_extent)
-            if self.fname:
-                menu.addAction('Force Rebuild', self.force_rebuild)
             menu.addAction('Open Video File...', lambda: self.load_view(self.vpath))
+            if self.fname:
+                menu.addAction('Reload', lambda: self.load_view(self.fname))
+                menu.addAction('Force Rebuild', self.force_rebuild)
+            menu.addAction('Optimize Window Extent', self.optimize_extent)
             menu.addAction('Thumbnail Manager', lambda: self.manage_thumbs(cfg['outdir']))
         else:
             menu.addAction('Abort Operation', self.abort_build)

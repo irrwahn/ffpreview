@@ -79,12 +79,13 @@ def str2float(s):
         return float(s)
     return 0.0
 
-def hr_size(sz):
+def hr_size(sz, prec=1):
     i = 0
     while sz >= 1024:
         sz /= 1024
         i += 1
-    return '%.1f %s' % (sz, ['', 'KiB', 'MiB', 'GiB', 'TiB'][i])
+    prec = prec if i else 0
+    return '%.*f %s' % (prec, sz, ['', 'KiB', 'MiB', 'GiB', 'TiB'][i])
 
 def ppdict(dic, excl=[]):
     s = ''
@@ -574,7 +575,12 @@ class tmDialog(QDialog):
         self.setWindowTitle("Thumbnail Manager")
         self.resize(800, 700)
         self.dlg_layout = QVBoxLayout(self)
+        self.hdr_layout = QHBoxLayout()
         self.loc_label = QLabel(text='Index of ' + self.outdir + '/')
+        self.tot_label = QLabel(text='--')
+        self.tot_label.setAlignment(Qt.AlignRight)
+        self.hdr_layout.addWidget(self.loc_label)
+        self.hdr_layout.addWidget(self.tot_label)
         self.tree_widget = QTreeWidget()
         self.tree_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.tree_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -615,7 +621,7 @@ class tmDialog(QDialog):
         self.btn_layout.addWidget(self.load_button)
         self.btn_layout.addWidget(QLabel('     '))
         self.btn_layout.addWidget(self.close_button)
-        self.dlg_layout.addWidget(self.loc_label)
+        self.dlg_layout.addLayout(self.hdr_layout)
         self.dlg_layout.addWidget(self.tree_widget)
         self.dlg_layout.addLayout(self.btn_layout)
         QShortcut('Del', self).activated.connect(self.remove)
@@ -633,13 +639,17 @@ class tmDialog(QDialog):
         self.ilist = get_indexfiles(self.outdir)
         self.tree_widget.clear()
         ncols = self.tree_widget.columnCount()
+        total_size = 0
+        cnt_broken = 0
         for entry in self.ilist:
+            total_size += entry['size']
             item = QTreeWidgetItem([entry['tdir'], str(entry['idx']['count']), hr_size(entry['size']),
                                     time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry['idx']['date']))])
             item.setToolTip(0, ppdict(entry['idx'], ['th']))
             item.setTextAlignment(1, Qt.AlignRight|Qt.AlignVCenter)
             item.setTextAlignment(2, Qt.AlignRight|Qt.AlignVCenter)
             if not entry['idx'] or not entry['vfile']:
+                cnt_broken += 1
                 font = item.font(0)
                 font.setItalic(True)
                 for col in range(ncols):
@@ -653,6 +663,8 @@ class tmDialog(QDialog):
             self.tree_widget.addTopLevelItem(item)
         for col in range(ncols):
             self.tree_widget.resizeColumnToContents(col)
+        self.tot_label.setText('~ ' + hr_size(total_size, 0))
+        self.selbroken_button.setEnabled(cnt_broken > 0)
 
     def select_broken(self):
         for i in range(self.tree_widget.topLevelItemCount()):

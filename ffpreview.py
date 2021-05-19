@@ -32,6 +32,7 @@ import argparse
 import json
 from configparser import RawConfigParser as ConfigParser
 from subprocess import PIPE, Popen, DEVNULL
+import shlex
 import base64
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
@@ -1267,21 +1268,18 @@ def play_video(filename, start='0', paused=False):
     signal.signal(signal.SIGPIPE, signal.SIG_DFL)
     # prepare argument vector
     cmd = cfg['plpaused'] if paused and cfg['plpaused'] else cfg['player']
-    args = cmd.split(' ') # FIXME: suboptimal splitting
+    args = shlex.split(cmd)
     for i in range(len(args)):
         args[i] = args[i].replace('%t', start).replace('%f', filename)
-    cstr = '[ '
-    for a in args:
-        cstr += "'" + a + "', "
-    eprint(1, 'args =', cstr + ']')
+    if cfg['verbosity'] > 0:
+        cstr = ''
+        for a in args:
+            cstr += "'" + a + "', "
+        eprint(1, 'args = [', cstr + ']')
     # close all fds and redirect stdin, stdout and stderr to /dev/null
     sys.stdout.flush()
     sys.stderr.flush()
-    try:
-        maxfd = os.sysconf('SC_OPEN_MAX')
-    except:
-        maxfd = 1024
-    for fd in range(maxfd):
+    for fd in range(1024):  # more than enough for us
         try:
             os.close(fd)
         except:

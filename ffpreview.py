@@ -289,29 +289,6 @@ def configure():
     if args.manage:
         cfg['manage'] = args.manage
 
-    # clear unused method parameters
-    if cfg['method'] == 'scene':
-        cfg['time_skip'] = None
-        cfg['frame_skip'] = None
-        cfg['customvf'] = None
-    elif cfg['method'] == 'skip':
-        cfg['scene_thresh'] = None
-        cfg['time_skip'] = None
-        cfg['customvf'] = None
-    elif cfg['method'] == 'time':
-        cfg['scene_thresh'] = None
-        cfg['frame_skip'] = None
-        cfg['customvf'] = None
-    elif cfg['method'] == 'customvf':
-        cfg['scene_thresh'] = None
-        cfg['time_skip'] = None
-        cfg['frame_skip'] = None
-    elif cfg['method'] == 'iframe':
-        cfg['scene_thresh'] = None
-        cfg['time_skip'] = None
-        cfg['frame_skip'] = None
-        cfg['customvf'] = None
-
     # parse grid geometry
     grid = re.split('[xX,;:]', cfg['grid'])
     cfg['grid_columns'] = int(grid[0])
@@ -1335,14 +1312,21 @@ def get_thinfo(vfile, thdir):
         'count': 0,
         'width': cfg['thumb_width'],
         'method': cfg['method'],
-        'frame_skip': cfg['frame_skip'],
-        'time_skip': cfg['time_skip'],
-        'scene_thresh': cfg['scene_thresh'],
-        'customvf': cfg['customvf'],
-        'date': 0,
-        'ffpreview': _FFPREVIEW_VERSION,
-        'th': []
     }
+    # include method specific parameters (only)
+    if cfg['method'] == 'scene':
+        thinfo['scene_thresh'] = cfg['scene_thresh']
+    elif cfg['method'] == 'skip':
+        thinfo['frame_skip'] = cfg['frame_skip']
+    elif cfg['method'] == 'time':
+        thinfo['time_skip'] = cfg['time_skip']
+    elif cfg['method'] == 'customvf':
+        thinfo['customvf'] = cfg['customvf']
+    # set these here for neater ordering
+    thinfo['ffpreview'] = _FFPREVIEW_VERSION
+    thinfo['date'] = 0
+    thinfo['th'] = []
+    # get video file meta info (frames, duration, fps)
     meta, ok = get_meta(vfile)
     if not ok:
         return None, False

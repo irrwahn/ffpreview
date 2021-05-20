@@ -313,6 +313,8 @@ def configure():
 # Qt classes
 
 class ffIcon:
+    """ Icon resource storage with only class attributes, not instantiated."""
+    initialized = False
     apply_png = """iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAABDlBMVEX///8ATwAATAAASQAATQAOaAsBWwEATgARaw4AWwAATgASaxAEUwQATAAVaxITZBIATAAshCMEUwQAVQAXaRUJXwcATQAOaAwDUgMXZhUQXA0ASwACUAIYXRQATgACTgIXVhECTgIaVBIATQAC
 TQIcUBQCSAIcUBEATAAATQAATgB2tWOay3u26qF5uGGTxnCZ0pCZ0I+QwW+m0HdYoEKRxWmJxnuIwnqQvWuayGhztGSTyGpZn0GOxGB/wGh7u2aWw2xKjTCKwVtksVCPyVxbnD+KwVd3wFV2vFmdyW1OizGDwkpQrCqCxkVkujJdsi2JvUtOgi1/yDVHug5XwhiOx0RU
 gy2R3j6Y1UdNfSlq55gUAAAAK3RSTlMAHXIOIe3YDeu8bPWRG+nWa/6QGOf1MtuV5vYzjfc0mvmd+TWg+qP6NkYkIiPNwAAAAIJJREFUGNNjYCAFMDIxo/BZWLXZ2JHlOXR09ThBLC5uHiDJy6dvYGjED2QJCBqbCDEIi5iamVuIigEFxC2trG0kJG3t7B2kpEE6ZByd
@@ -403,36 +405,39 @@ eQD7vlL/16v+06X8vlL/2q7/1qX8u0r/0o3LbzjLbjb+y3j7wUj/0oC8RxL/zGf7vTj+0mr/0mXDSRP/
 fxD/8wD/8QD+5gn2vBf/6gD/7wD/9ADqfxHqgBH/9wD/8gD2vhf92CT/5hf/5gD/6QD/7AD/5wD/4xf92yY5YL/DAAAAJXRSTlMAY1VX/lzn6Wtv7O17fvHyiYsF9vYFmZcL+voLqKbq6pb49/aTMf8OLAAAAJ5JREFUGNNjYMABGJlQ+cwsqqwoAmxq6uzIfA4NTS1t
 TiQBLh1dPX1uBJ/HwNDIyNiEFy7AZ2pmbm5hyQ/jC1hZ29ja2Ts4CkL4QsJOzi6ubu4eniKiYAExL28fXz//gIDAIHEQX0Iy2D8kNCwsPCI0UkoaKCAT5R8dExsXn5AYGpIkCxSQS05JTUsPTY/OCMzMkgcKKCgqwYGyCqa3AZWSG22RwdIDAAAAAElFTkSuQmCC
 """
-    def init():
+    def __new__(cls):
+        if cls.initialized:
+            return
+        cls.initialized = True
         # NOTE: commented icons are currently unused
-        #ffIcon.apply_pxm = sQPixmap(imgdata=ffIcon.apply_png)
-        #ffIcon.apply = QIcon(ffIcon.apply_pxm)
-        ffIcon.broken_pxm = sQPixmap(imgdata=ffIcon.broken_png)
-        ffIcon.broken = QIcon(ffIcon.broken_pxm)
-        ffIcon.close_pxm = sQPixmap(imgdata=ffIcon.close_png)
-        ffIcon.close = QIcon(ffIcon.close_pxm)
-        ffIcon.delete_pxm = sQPixmap(imgdata=ffIcon.delete_png)
-        ffIcon.delete = QIcon(ffIcon.delete_pxm)
-        ffIcon.error_pxm = sQPixmap(imgdata=ffIcon.error_png)
-        ffIcon.error = QIcon(ffIcon.error_pxm)
-        ffIcon.ffpreview_pxm = sQPixmap(imgdata=ffIcon.ffpreview_png)
-        ffIcon.ffpreview = QIcon(ffIcon.ffpreview_pxm)
-        #ffIcon.info_pxm = sQPixmap(imgdata=ffIcon.info_png)
-        #ffIcon.info = QIcon(ffIcon.info_pxm)
-        ffIcon.ok_pxm = sQPixmap(imgdata=ffIcon.ok_png)
-        ffIcon.ok = QIcon(ffIcon.ok_pxm)
-        ffIcon.open_pxm = sQPixmap(imgdata=ffIcon.open_png)
-        ffIcon.open = QIcon(ffIcon.open_pxm)
-        #ffIcon.question_pxm = sQPixmap(imgdata=ffIcon.question_png)
-        #ffIcon.question = QIcon(ffIcon.question_pxm)
-        ffIcon.refresh_pxm = sQPixmap(imgdata=ffIcon.refresh_png)
-        ffIcon.refresh = QIcon(ffIcon.refresh_pxm)
-        ffIcon.remove_pxm = sQPixmap(imgdata=ffIcon.remove_png)
-        ffIcon.remove = QIcon(ffIcon.remove_pxm)
-        ffIcon.revert_pxm = sQPixmap(imgdata=ffIcon.revert_png)
-        ffIcon.revert = QIcon(ffIcon.revert_pxm)
-        #ffIcon.warning_pxm = sQPixmap(imgdata=ffIcon.warning_png)
-        #ffIcon.warning = QIcon(ffIcon.warning_pxm)
+        #cls.apply_pxm = sQPixmap(imgdata=ffIcon.apply_png)
+        #cls.apply = QIcon(ffIcon.apply_pxm)
+        cls.broken_pxm = sQPixmap(imgdata=ffIcon.broken_png)
+        cls.broken = QIcon(ffIcon.broken_pxm)
+        cls.close_pxm = sQPixmap(imgdata=ffIcon.close_png)
+        cls.close = QIcon(ffIcon.close_pxm)
+        cls.delete_pxm = sQPixmap(imgdata=ffIcon.delete_png)
+        cls.delete = QIcon(ffIcon.delete_pxm)
+        cls.error_pxm = sQPixmap(imgdata=ffIcon.error_png)
+        cls.error = QIcon(ffIcon.error_pxm)
+        cls.ffpreview_pxm = sQPixmap(imgdata=ffIcon.ffpreview_png)
+        cls.ffpreview = QIcon(ffIcon.ffpreview_pxm)
+        #cls.info_pxm = sQPixmap(imgdata=ffIcon.info_png)
+        #cls.info = QIcon(ffIcon.info_pxm)
+        cls.ok_pxm = sQPixmap(imgdata=ffIcon.ok_png)
+        cls.ok = QIcon(ffIcon.ok_pxm)
+        cls.open_pxm = sQPixmap(imgdata=ffIcon.open_png)
+        cls.open = QIcon(ffIcon.open_pxm)
+        #cls.question_pxm = sQPixmap(imgdata=ffIcon.question_png)
+        #cls.question = QIcon(ffIcon.question_pxm)
+        cls.refresh_pxm = sQPixmap(imgdata=ffIcon.refresh_png)
+        cls.refresh = QIcon(ffIcon.refresh_pxm)
+        cls.remove_pxm = sQPixmap(imgdata=ffIcon.remove_png)
+        cls.remove = QIcon(ffIcon.remove_pxm)
+        cls.revert_pxm = sQPixmap(imgdata=ffIcon.revert_png)
+        cls.revert = QIcon(ffIcon.revert_pxm)
+        #cls.warning_pxm = sQPixmap(imgdata=ffIcon.warning_png)
+        #cls.warning = QIcon(ffIcon.warning_pxm)
 
 
 class sQPixmap(QPixmap):
@@ -718,7 +723,7 @@ class sMainWindow(QMainWindow):
 
     def __init__(self, *args, title='', **kwargs):
         super().__init__(*args, **kwargs)
-        ffIcon.init()
+        ffIcon()
         self.init_window(title)
 
     def closeEvent(self, event):

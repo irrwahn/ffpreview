@@ -227,13 +227,13 @@ class ffConfig:
             cfg['conffile'] = args.config
         else:
             # try to locate a user config file
-            home = os.environ.get('HOME')
+            if os.environ.get('HOME'):
+                home_cfg = os.path.join(os.environ.get('HOME'), '.config')
             cfg['conffile'] = os.path.join(
-                os.path.dirname(os.path.realpath(__file__)) or
                 os.environ.get('XDG_CONFIG_HOME') or
-                (os.path.join(home, '.config') if home else None) or
                 os.environ.get('APPDATA') or
-                sys.path[0],
+                home_cfg or
+                os.path.dirname(os.path.realpath(__file__)),
                 cfg['conffile']
             )
         fconf = ConfigParser(allow_no_value=True, defaults=cfg)

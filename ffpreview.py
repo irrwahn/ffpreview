@@ -227,9 +227,11 @@ class ffConfig:
             cfg['conffile'] = args.config
         else:
             # try to locate a user config file
+            home = os.environ.get('HOME')
             cfg['conffile'] = os.path.join(
-                os.path.join(os.environ['HOME'], '.config') or
+                os.path.dirname(os.path.realpath(__file__)) or
                 os.environ.get('XDG_CONFIG_HOME') or
+                (os.path.join(home, '.config') if home else None) or
                 os.environ.get('APPDATA') or
                 sys.path[0],
                 cfg['conffile']
@@ -241,7 +243,7 @@ class ffConfig:
             for option in fconf.options('Default'):
                 cfg[option] = fconf.get('Default', option)
         except Exception as e:
-            eprint(1, str(e), '(config file missing or corrupt)', vo=vo)
+            eprint(1, str(e), '(config file', cfg['conffile'], 'missing or corrupt)', vo=vo)
         else:
             eprint(1, 'read config from', cfg['conffile'], vo=vo)
         # fix up types of non-string options

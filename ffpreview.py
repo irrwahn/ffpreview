@@ -1017,10 +1017,14 @@ class sMainWindow(QMainWindow):
             self.load_view(self.fname)
             cfg['force'] = False
 
+    def set_view_locked(self, lock=True):
+        self.view_locked = lock
+        self.scroll.setEnabled(not lock)
+
     def load_view(self, fname):
         if self.view_locked:
             return
-        self.view_locked = True
+        self.set_view_locked(True)
         # sanitize file name
         if not fname:
             fname = os.getcwd()
@@ -1033,7 +1037,7 @@ class sMainWindow(QMainWindow):
                         'Video Files ('+ cfg['vformats'] +');;All Files (*)',
                         options=QFileDialog.Options()|QFileDialog.DontUseNativeDialog)
         if not fname or not os.path.exists(fname) or not os.access(fname, os.R_OK):
-            self.view_locked = False
+            self.set_view_locked(False)
             return
         self.fname = os.path.abspath(fname)
         self.vfile = os.path.basename(self.fname)
@@ -1055,7 +1059,7 @@ class sMainWindow(QMainWindow):
         self.thinfo, ok = get_thinfo(self.fname, self.thdir)
         if self.thinfo is None:
             self.statdsp[0].setText('Unrecognized file format')
-            self.view_locked = False
+            self.set_view_locked(False)
             return
         if not ok:
             # (re)generate thumbnails and index file
@@ -1094,7 +1098,7 @@ class sMainWindow(QMainWindow):
         # set window size
         self.setMinimumSize(self.tlwidth + self.px, self.tlheight + self.py)
         self.optimize_extent()
-        self.view_locked = False
+        self.set_view_locked(False)
 
 
 ############################################################

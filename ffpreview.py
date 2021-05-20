@@ -43,7 +43,8 @@ from inspect import currentframe
 # utility functions
 
 def eprint(lvl=0, *args, **kwargs):
-    if lvl <= cfg['verbosity']:
+    v = cfg['verbosity'] if 'cfg' in globals() else 0
+    if lvl <= v:
         print('LINE %d: ' % currentframe().f_back.f_lineno, file=sys.stderr, end = '')
         print(*args, file=sys.stderr, **kwargs)
 
@@ -98,8 +99,8 @@ def ppdict(dic, excl=[]):
     return s.strip()
 
 def kill_proc(p=None):
-    global proc
-    if p is None:
+    if p is None and 'proc' in globals():
+        global proc
         p = proc
     if p is not None:
         eprint(1, 'killing subprocess: %s' % p.args)
@@ -111,8 +112,7 @@ def kill_proc(p=None):
     return None
 
 def die(rc):
-    global proc
-    proc = kill_proc(proc)
+    kill_proc()
     if '_ffdbg_thread' in globals():
         global _ffdbg_thread, _ffdbg_run
         _ffdbg_run = False

@@ -27,18 +27,6 @@ thumb_width=192
 # Initial thumbnail grid geometry, format: Columns[xRows].
 grid=5x4
 
-# Application and selected thumbnail style in basic CSS syntax.
-# Examples:
-#  Standard theme example:
-#   appstyle=
-#   selstyle=background-color: lightblue;
-#  Dark theme example:
-#   appstyle= * {background-color: #181818; color: #b0b0b0;}
-#             :selected {background-color: #4a90d9; color: #f4f8fd;}
-#   selstyle= background-color: #4a90d9; color: #f4f8fd;
-appstyle=
-selstyle=background-color: lightblue;
-
 # Path to ffprobe executable.
 ffprobe=ffprobe
 

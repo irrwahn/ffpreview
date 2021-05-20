@@ -138,8 +138,6 @@ class ffConfig:
         'grid_columns': 5,
         'grid_rows': 4,
         'thumb_width': '192',
-        'appstyle': '',
-        'selstyle': 'background-color: lightblue;',
         'ffprobe': 'ffprobe',
         'ffmpeg': 'ffmpeg',
         'player': 'mpv --no-ordered-chapters --start=%t %f',
@@ -776,9 +774,12 @@ class sMainWindow(QMainWindow):
             self.cur = 0
             return
         try:
-            self.tlabels[self.cur].setStyleSheet('QLabel {}')
+            self.tlabels[self.cur].setStyleSheet('')
+            bg_hl = self.palette().highlight().color().name()
+            fg_hl = self.palette().highlightedText().color().name()
+            style_hl = 'QLabel {background-color: %s; color: %s;}' % (bg_hl, fg_hl)
             self.cur = min(max(0, self.cur if idx is None else idx), l - 1)
-            self.tlabels[self.cur].setStyleSheet( 'QLabel {' + cfg['selstyle'] + '}' )
+            self.tlabels[self.cur].setStyleSheet(style_hl)
             self.statdsp[3].setText('%d / %d' % (self.tlabels[self.cur].info[0], l))
             self.scroll.ensureWidgetVisible(self.tlabels[self.cur], 0, 0)
         except:
@@ -900,7 +901,6 @@ class sMainWindow(QMainWindow):
         self.setWindowTitle(title)
         self.setWindowIcon(ffIcon.ffpreview)
         self.resize(500, 300)
-        self.setStyleSheet(cfg['appstyle'])
         self.clipboard = QApplication.clipboard()
         # set up status bar
         statbar = QHBoxLayout()

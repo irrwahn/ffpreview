@@ -1290,14 +1290,18 @@ def chk_idxfile(thinfo, thdir):
                     return False
                 if idx['method'] != thinfo['method']:
                     return False
-                if idx['frame_skip'] != thinfo['frame_skip']:
-                    return False
-                if idx['time_skip'] != thinfo['time_skip']:
-                    return False
-                if idx['scene_thresh'] != thinfo['scene_thresh']:
-                    return False
-                if idx['customvf'] != thinfo['customvf']:
-                    return False
+                if idx['method'] == 'skip':
+                    if not 'frame_skip' in idx or idx['frame_skip'] != thinfo['frame_skip']:
+                        return False
+                elif idx['method'] == 'time':
+                    if not 'time_skip' in idx or idx['time_skip'] != thinfo['time_skip']:
+                        return False
+                elif idx['method'] == 'scene':
+                    if not 'scene_thresh' in idx or idx['scene_thresh'] != thinfo['scene_thresh']:
+                        return False
+                elif idx['method'] == 'customvf':
+                    if not 'customvf' in idx or idx['customvf'] != thinfo['customvf']:
+                        return False
             return idx
     except Exception as e:
         eprint(1, idxpath, str(e))

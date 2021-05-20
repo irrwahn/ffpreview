@@ -34,6 +34,7 @@ from configparser import RawConfigParser as ConfigParser
 from subprocess import PIPE, Popen, DEVNULL
 import shlex
 import base64
+from copy import deepcopy
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
@@ -42,8 +43,8 @@ from inspect import currentframe
 ############################################################
 # utility functions
 
-def eprint(lvl=0, *args, **kwargs):
-    v = cfg['verbosity'] if 'cfg' in globals() else 0
+def eprint(lvl, *args, vo=0, **kwargs):
+    v = cfg['verbosity'] if 'cfg' in globals() else vo
     if lvl <= v:
         print('LINE %d: ' % currentframe().f_back.f_lineno, file=sys.stderr, end = '')
         print(*args, file=sys.stderr, **kwargs)
@@ -127,17 +128,16 @@ def sig_handler(signum, frame):
 ############################################################
 # configuration
 
-def configure():
-    # set defaults
-    global cfg
-    cfg = {
+class ffConfig:
+    """ Configuration class with only class attributes, not instantiated."""
+    cfg = None
+    cfg_dflt = {
         'conffile': 'ffpreview.conf',
-        'vid': '',
+        'vid': [''],
         'outdir': '',
-        'grid': '5x5',
         'grid_columns': 5,
-        'grid_rows': 5,
-        'thumb_width': '128',
+        'grid_rows': 4,
+        'thumb_width': '192',
         'appstyle': '',
         'selstyle': 'background-color: lightblue;',
         'ffprobe': 'ffprobe',
@@ -163,150 +163,171 @@ def configure():
                     '.m2p *.m2ts *.mkv *.mk3d *.mov *.mp4 *.mpeg *.mpg '
                     '*.ogg *.ogv *.ogv *.qt *.rmvb *.vob *.webm *.wmv'
     }
-    if cfg['platform'] == 'Windows':
-        cfg['env']['PATH'] = sys.path[0] + os.pathsep + cfg['env']['PATH']
-        cfg['exec'] = ''
-
-    # parse command line arguments
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.RawTextHelpFormatter,
-        description='Generate interactive video thumbnail preview.',
-        epilog='  The -C, -i, -N, -n and -s options are mutually exclusive. If more\n'
-               '  than one is supplied: -C beats -i beats -N beats -n beats -s.\n\n'
-               '  The -r option causes ffpreview to ignore any of the -w, -C, -i\n'
-               '  -N, -n and -s options, provided that filename, duration, start\n'
-               '  and end times match, and the index file appears to be healthy.\n'
-               '\nwindow controls:\n'
-               '  ESC               leave full screen view, quit application\n'
-               '  Ctrl+Q, Ctrl-W    quit application\n'
-               '  Alt+Return, F     toggle full screen view\n'
-               '  Ctrl+G            adjust window geometry for optimal fit\n'
-               '  Ctrl+O            show open file dialog\n'
-               '  Ctrl+M            open thumbnail manager\n'
-               '  Double-click,\n'
-               '  Return, Space     open video at selected position in paused state\n'
-               '  Shift+dbl-click,\n'
-               '  Shift+Return      play video starting at selected position\n'
-               '  Mouse-2, Menu,\n'
-               '  Alt+Return        open the context menu\n'
-               '  Up, Down,\n'
-               '  PgUp, PgDown,\n'
-               '  Home, End,\n'
-               '  TAB, Shift+TAB    move highlighted selection marker\n'
-    )
-    parser.add_argument('filename', nargs='*', default=[os.getcwd()], help='input video file')
-    parser.add_argument('-b', '--batch', action='count', help='batch mode, do not draw window')
-    parser.add_argument('-m', '--manage', action='count', help='start with thumbnail manager')
-    parser.add_argument('-c', '--config', metavar='F', help='read configuration from file F')
-    parser.add_argument('-g', '--grid', metavar='G', help='set grid geometry in COLS[xROWS] format')
-    parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
-    parser.add_argument('-o', '--outdir', metavar='P', help='set thumbnail parent directory to P')
-    parser.add_argument('-f', '--force', action='count', help='force thumbnail and index rebuild')
-    parser.add_argument('-r', '--reuse', action='count', help='reuse filter settings from index file')
-    parser.add_argument('-i', '--iframe', action='count', help='select only I-frames (default)')
-    parser.add_argument('-n', '--nskip', type=int, metavar='N', help='select only every Nth frame')
-    parser.add_argument('-N', '--nsecs', type=float, metavar='F', help='select one frame every F seconds')
-    parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold; 0 < F < 1')
-    parser.add_argument('-C', '--customvf', metavar='S', help='select frames using custom filter string S')
-    parser.add_argument('-S', '--start', metavar='T', help='start video analysis at time T')
-    parser.add_argument('-E', '--end', metavar='T', help='end video analysis at time T')
-    parser.add_argument('-v', '--verbose', action='count', help='be more verbose; repeat to increase')
-    parser.add_argument('--version', action='count', help='print version info and exit')
-    args = parser.parse_args()
-
-    if args.version:
-        print('ffpreview version %s running on python %.1f.x (%s)'
-                % (_FFPREVIEW_VERSION, _PYTHON_VERSION, cfg['platform']))
-        die(0)
-
-    # parse config file
-    defconfpath = os.path.join( # try to determine user config file
-        os.environ.get('APPDATA') or
-        os.environ.get('XDG_CONFIG_HOME') or
-        os.path.join(os.environ['HOME'], '.config') or
-        sys.path[0],
-        cfg['conffile']
-    )
-    if args.config:
-        cfg['conffile'] = args.config
-    cfgfiles = [defconfpath, cfg['conffile']]
-    fconf = ConfigParser(allow_no_value=True, defaults=cfg)
-    cf = fconf.read(cfgfiles)
-    try:
-        options = fconf.options('Default')
-        for option in options:
-            try:
+    def __new__(cls):
+        if cls.cfg:
+            return cls
+        # initialize default values
+        if cls.cfg_dflt['platform'] == 'Windows':
+            cls.cfg_dflt['env']['PATH'] = sys.path[0] + os.pathsep + cls.cfg_dflt['env']['PATH']
+            cls.cfg_dflt['exec'] = ''
+        cfg = cls.get_defaults()
+        # parse command line arguments
+        parser = argparse.ArgumentParser(
+            formatter_class=argparse.RawTextHelpFormatter,
+            description='Generate interactive video thumbnail preview.',
+            epilog='  The -C, -i, -N, -n and -s options are mutually exclusive. If more\n'
+                   '  than one is supplied: -C beats -i beats -N beats -n beats -s.\n\n'
+                   '  The -r option causes ffpreview to ignore any of the -w, -C, -i\n'
+                   '  -N, -n and -s options, provided that filename, duration, start\n'
+                   '  and end times match, and the index file appears to be healthy.\n'
+                   '\nwindow controls:\n'
+                   '  ESC               leave full screen view, quit application\n'
+                   '  Ctrl+Q, Ctrl-W    quit application\n'
+                   '  Alt+Return, F     toggle full screen view\n'
+                   '  Ctrl+G            adjust window geometry for optimal fit\n'
+                   '  Ctrl+O            show open file dialog\n'
+                   '  Ctrl+M            open thumbnail manager\n'
+                   '  Double-click,\n'
+                   '  Return, Space     open video at selected position in paused state\n'
+                   '  Shift+dbl-click,\n'
+                   '  Shift+Return      play video starting at selected position\n'
+                   '  Mouse-2, Menu,\n'
+                   '  Alt+Return        open the context menu\n'
+                   '  Up, Down,\n'
+                   '  PgUp, PgDown,\n'
+                   '  Home, End,\n'
+                   '  TAB, Shift+TAB    move highlighted selection marker\n'
+        )
+        parser.add_argument('filename', nargs='*', default=[os.getcwd()], help='input video file')
+        parser.add_argument('-b', '--batch', action='count', help='batch mode, do not draw window')
+        parser.add_argument('-m', '--manage', action='count', help='start with thumbnail manager')
+        parser.add_argument('-c', '--config', metavar='F', help='read configuration from file F')
+        parser.add_argument('-g', '--grid', metavar='G', help='set grid geometry in COLS[xROWS] format')
+        parser.add_argument('-w', '--width', type=int, metavar='N', help='thumbnail image width in pixel')
+        parser.add_argument('-o', '--outdir', metavar='P', help='set thumbnail parent directory to P')
+        parser.add_argument('-f', '--force', action='count', help='force thumbnail and index rebuild')
+        parser.add_argument('-r', '--reuse', action='count', help='reuse filter settings from index file')
+        parser.add_argument('-i', '--iframe', action='count', help='select only I-frames (default)')
+        parser.add_argument('-n', '--nskip', type=int, metavar='N', help='select only every Nth frame')
+        parser.add_argument('-N', '--nsecs', type=float, metavar='F', help='select one frame every F seconds')
+        parser.add_argument('-s', '--scene', type=float, metavar='F', help='select by scene change threshold; 0 < F < 1')
+        parser.add_argument('-C', '--customvf', metavar='S', help='select frames using custom filter string S')
+        parser.add_argument('-S', '--start', metavar='T', help='start video analysis at time T')
+        parser.add_argument('-E', '--end', metavar='T', help='end video analysis at time T')
+        parser.add_argument('-v', '--verbose', action='count', help='be more verbose; repeat to increase')
+        parser.add_argument('--version', action='count', help='print version info and exit')
+        args = parser.parse_args()
+        # if requested print only version and exit
+        if args.version:
+            print('ffpreview version %s running on python %.1f.x (%s)'
+                    % (_FFPREVIEW_VERSION, _PYTHON_VERSION, cfg['platform']))
+            die(0)
+        # parse config file
+        if args.config:
+            cfg['conffile'] = args.config
+        else:
+            # try to locate a user config file
+            cfg['conffile'] = os.path.join(
+                os.path.join(os.environ['HOME'], '.config') or
+                os.environ.get('XDG_CONFIG_HOME') or
+                os.environ.get('APPDATA') or
+                sys.path[0],
+                cfg['conffile']
+            )
+        fconf = ConfigParser(allow_no_value=True, defaults=cfg)
+        cf = fconf.read([cfg['conffile']])
+        try:
+            vo = args.verbose if args.verbose else 0
+            for option in fconf.options('Default'):
                 cfg[option] = fconf.get('Default', option)
-            except Exception as e:
-                eprint(0, str(e))
-    except Exception as e:
-        eprint(0, str(e))
+        except Exception as e:
+            eprint(1, str(e), '(config file missing or corrupt)', vo=vo)
+        else:
+            eprint(1, 'read config from', cfg['conffile'], vo=vo)
+        # fix up types of non-string options
+        cfg['force'] = str2bool(cfg['force'])
+        cfg['reuse'] = str2bool(cfg['reuse'])
+        cfg['thumb_width'] = str2int(cfg['thumb_width'])
+        cfg['frame_skip'] = str2int(cfg['frame_skip'])
+        cfg['time_skip'] = str2float(cfg['time_skip'])
+        cfg['scene_thresh'] = str2float(cfg['scene_thresh'])
+        cfg['start'] = str2float(cfg['start'])
+        cfg['end'] = str2float(cfg['end'])
+        # evaluate remaining command line args
+        cfg['vid'] = args.filename
+        if args.outdir:
+            cfg['outdir'] = args.outdir
+        if args.start:
+            cfg['start'] = hms2s(args.start)
+        if args.end:
+            cfg['end'] = hms2s(args.end)
+        if args.grid:
+            grid = re.split('[xX,;:]', args.grid)
+            cfg['grid_columns'] = int(grid[0])
+            if len(grid) > 1:
+                cfg['grid_rows'] = int(grid[1])
+        if args.width:
+            cfg['thumb_width'] = args.width
+        if args.force:
+            cfg['force'] = True
+        if args.reuse:
+            cfg['reuse'] = True
+        if args.scene:
+            cfg['method'] = 'scene'
+            cfg['scene_thresh'] = args.scene
+        if args.nskip:
+            cfg['method'] = 'skip'
+            cfg['frame_skip'] = args.nskip
+        if args.nsecs:
+            cfg['method'] = 'time'
+            cfg['time_skip'] = args.nsecs
+        if args.iframe:
+            cfg['method'] = 'iframe'
+        if args.customvf:
+            cfg['method'] = 'customvf'
+            cfg['customvf'] = args.customvf
+        if args.verbose:
+            cfg['verbosity'] = args.verbose
+        if args.batch:
+            cfg['batch'] = args.batch
+        if args.manage:
+            cfg['manage'] = args.manage
+        # prepare output directory
+        if not cfg['outdir']:
+            cfg['outdir'] = tempfile.gettempdir()
+        cfg['outdir'] = os.path.join(cfg['outdir'], 'ffpreview_thumbs')
+        try:
+            os.makedirs(cfg['outdir'], exist_ok=True)
+        except Exception as e:
+            eprint(0, str(e))
+            die(1)
+        eprint(1, 'outdir =', cfg['outdir'])
+        # commit to successfully prepared config
+        cls.cfg = cfg
+        return cls
 
-    # fix up types of non-string options
-    cfg['force'] = str2bool(cfg['force'])
-    cfg['reuse'] = str2bool(cfg['reuse'])
-    cfg['thumb_width'] = str2int(cfg['thumb_width'])
-    cfg['frame_skip'] = str2int(cfg['frame_skip'])
-    cfg['time_skip'] = str2float(cfg['time_skip'])
-    cfg['scene_thresh'] = str2float(cfg['scene_thresh'])
-    cfg['start'] = str2float(cfg['start'])
-    cfg['end'] = str2float(cfg['end'])
+    @classmethod
+    def get(cls):
+        return cls.cfg
 
-    # evaluate remaining command line args
-    cfg['vid'] = args.filename
-    if args.outdir:
-        cfg['outdir'] = args.outdir
-    if args.start:
-        cfg['start'] = hms2s(args.start)
-    if args.end:
-        cfg['end'] = hms2s(args.end)
-    if args.grid:
-        cfg['grid'] = args.grid
-    if args.width:
-        cfg['thumb_width'] = args.width
-    if args.force:
-        cfg['force'] = True
-    if args.reuse:
-        cfg['reuse'] = True
-    if args.scene:
-        cfg['method'] = 'scene'
-        cfg['scene_thresh'] = args.scene
-    if args.nskip:
-        cfg['method'] = 'skip'
-        cfg['frame_skip'] = args.nskip
-    if args.nsecs:
-        cfg['method'] = 'time'
-        cfg['time_skip'] = args.nsecs
-    if args.iframe:
-        cfg['method'] = 'iframe'
-    if args.customvf:
-        cfg['method'] = 'customvf'
-        cfg['customvf'] = args.customvf
-    if args.verbose:
-        cfg['verbosity'] = args.verbose
-    if args.batch:
-        cfg['batch'] = args.batch
-    if args.manage:
-        cfg['manage'] = args.manage
+    @classmethod
+    def set(cls, newcfg=None):
+        if newcfg:
+            cls.cfg = deepcopy(newcfg)
+            return cls.cfg
+        return None
 
-    # parse grid geometry
-    grid = re.split('[xX,;:]', cfg['grid'])
-    cfg['grid_columns'] = int(grid[0])
-    if len(grid) > 1:
-        cfg['grid_rows'] = int(grid[1])
+    @classmethod
+    def update(cls, updcfg=None):
+        if updcfg:
+            cls.cfg.update(updcfg)
+            return cls.cfg
+        return None
 
-    # prepare output directory
-    if not cfg['outdir']:
-        cfg['outdir'] = tempfile.gettempdir()
-    cfg['outdir'] = os.path.join(cfg['outdir'], 'ffpreview_thumbs')
-    try:
-        os.makedirs(cfg['outdir'], exist_ok=True)
-    except Exception as e:
-        eprint(0, str(e))
-        die(1)
-
-    return cfg
-    # end of configure()
+    @classmethod
+    def get_defaults(cls):
+        cfg = deepcopy(cls.cfg_dflt)
+        return cfg
 
 
 ############################################################
@@ -1458,7 +1479,7 @@ def main():
     # initialization
     global proc, cfg
     proc = None
-    cfg = configure()
+    cfg = ffConfig().get()
     if cfg['verbosity'] > 2:
         eprint(3, 'cfg = ' + json.dumps(cfg, indent=2))
 

@@ -78,14 +78,15 @@ def str2int(s):
     if type(s) == type(1):
         return s
     if s and type(s) == type(' '):
-        return int(re.match('(^\d+)', s).groups()[0])
+        return int(re.match(r'^\s*(\d+)', s).groups()[0])
     return 0
 
 def str2float(s):
     if type(s) == type(1.1):
         return s
     if s and type(s) == type(' '):
-        return float(s)
+        m = re.match(r'^\s*([+-]?([0-9]+([.][0-9]*)?|[.][0-9]+))', s)
+        return float(m.groups()[0])
     return 0.0
 
 def hr_size(sz, prec=1):
@@ -256,7 +257,7 @@ class ffConfig:
         if args.end:
             cfg['end'] = hms2s(args.end)
         if args.grid:
-            grid = re.split('[xX,;:]', args.grid)
+            grid = re.split(r'[xX,;:]', args.grid)
             cfg['grid_columns'] = int(grid[0])
             if len(grid) > 1:
                 cfg['grid_rows'] = int(grid[1])
@@ -739,7 +740,7 @@ class tmDialog(QDialog):
                     mbox.setWindowTitle('Directory Removal Failed')
                     mbox.setIcon(QMessageBox.Critical)
                     mbox.setStandardButtons(QMessageBox.Ok)
-                    mbox.setText(re.sub('^\[.*\]\s*', '', str(e)).replace(':', ':\n\n', 1))
+                    mbox.setText(re.sub(r'^\[.*\]\s*', '', str(e)).replace(':', ':\n\n', 1))
                     mbox.exec_()
             self.refresh_list()
 
@@ -868,7 +869,7 @@ class cfgDialog(QDialog):
             found = False
             repl = '%s=%s' % (o[0], str(self.cfg[o[0]]))
             for i in range(len(lines)):
-                if re.match('^\w*%s\w*=' % o[0], lines[i]):
+                if re.match(r'^\s*%s\s*=' % o[0], lines[i]):
                     lines[i] = repl
                     found = True
                     break
@@ -1488,7 +1489,7 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
             if line:
                 line = line.decode()
                 ebuf += line
-                x = re.search('pts_time:\d*\.?\d*', line)
+                x = re.search(r'pts_time:\d*\.?\d*', line)
                 if x is not None:
                     cnt += 1
                     t = x.group().split(':')[1]
@@ -1699,7 +1700,7 @@ def clear_thumbdir(thdir):
             eprint(0, str(e))
             pass
     for f in os.listdir(thdir):
-        if re.match('^\d{8}\.png$', f):
+        if re.match(r'^\d{8}\.png$', f):
             try:
                 os.unlink(os.path.join(thdir, f))
             except Exception as e:
@@ -1769,7 +1770,7 @@ def get_indexfiles(path):
                             entry['vfile'] = opath
         sz = cnt = 0
         for f in os.listdir(d):
-            if re.match('^\d{8}\.png$', f):
+            if re.match(r'^\d{8}\.png$', f):
                 cnt += 1
                 try:
                     sz += os.path.getsize(os.path.join(d, f))

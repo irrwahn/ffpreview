@@ -822,8 +822,13 @@ class cfgDialog(QDialog):
         self.dlg_layout.addLayout(self.btn_layout)
         self.refresh()
 
+    def reject(self):
+        self.deleteLater()
+        super().reject()
+
     def accept(self):
         self.apply()
+        self.deleteLater()
         super().accept()
 
     def reset(self):

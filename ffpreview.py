@@ -68,17 +68,23 @@ def s2hms(ts, frac=True):
     return res
 
 def str2bool(s):
-    if s:
+    if type(s) == type(True):
+        return s
+    if s and type(s) == type(' '):
         return s.lower() in ['true', '1', 'on', 'y', 'yes']
     return False
 
 def str2int(s):
-    if s:
-        return int(s)
+    if type(s) == type(1):
+        return s
+    if s and type(s) == type(' '):
+        return int(re.match('(^\d+)', s).groups()[0])
     return 0
 
 def str2float(s):
-    if s:
+    if type(s) == type(1.1):
+        return s
+    if s and type(s) == type(' '):
         return float(s)
     return 0.0
 
@@ -239,27 +245,8 @@ class ffConfig:
                 os.path.dirname(os.path.realpath(__file__)),
                 cfg['conffile']
             )
-        fconf = ConfigParser(allow_no_value=True, defaults=cfg)
-        try:
-            vo = args.verbose if args.verbose else 0
-            cf = fconf.read([cfg['conffile']])
-            for option in fconf.options('Default'):
-                cfg[option] = fconf.get('Default', option)
-        except Exception as e:
-            eprint(1, str(e), '(config file', cfg['conffile'], 'missing or corrupt)', vo=vo)
-        else:
-            eprint(1, 'read config from', cfg['conffile'], vo=vo)
-        # fix up types of non-string options
-        cfg['force'] = str2bool(cfg['force'])
-        cfg['reuse'] = str2bool(cfg['reuse'])
-        cfg['grid_rows'] = str2int(cfg['grid_rows'])
-        cfg['grid_columns'] = str2int(cfg['grid_columns'])
-        cfg['thumb_width'] = str2int(cfg['thumb_width'])
-        cfg['frame_skip'] = str2int(cfg['frame_skip'])
-        cfg['time_skip'] = str2float(cfg['time_skip'])
-        cfg['scene_thresh'] = str2float(cfg['scene_thresh'])
-        cfg['start'] = str2float(cfg['start'])
-        cfg['end'] = str2float(cfg['end'])
+        vo = args.verbose if args.verbose else 0
+        cls.load_cfgfile(cfg, cfg['conffile'], vo)
         # evaluate remaining command line args
         cfg['vid'] = args.filename
         if args.outdir:
@@ -306,6 +293,31 @@ class ffConfig:
         eprint(1, 'outdir =', cfg['outdir'])
         # commit to successfully prepared config
         return cls.set(cfg)
+
+    @classmethod
+    def load_cfgfile(cls, cfg, fname, vo):
+        fconf = ConfigParser(allow_no_value=True, defaults=cfg)
+        try:
+            cf = fconf.read(fname)
+            for option in fconf.options('Default'):
+                cfg[option] = fconf.get('Default', option)
+        except Exception as e:
+            eprint(1, str(e), '(config file', fname, 'missing or corrupt)', vo=vo)
+            return False
+        else:
+            eprint(1, 'read config from', cfg['conffile'], vo=vo)
+        # fix up types of non-string options
+        cfg['force'] = str2bool(cfg['force'])
+        cfg['reuse'] = str2bool(cfg['reuse'])
+        cfg['grid_rows'] = str2int(cfg['grid_rows'])
+        cfg['grid_columns'] = str2int(cfg['grid_columns'])
+        cfg['thumb_width'] = str2int(cfg['thumb_width'])
+        cfg['frame_skip'] = str2int(cfg['frame_skip'])
+        cfg['time_skip'] = str2float(cfg['time_skip'])
+        cfg['scene_thresh'] = str2float(cfg['scene_thresh'])
+        cfg['start'] = str2float(cfg['start'])
+        cfg['end'] = str2float(cfg['end'])
+        return True
 
     @classmethod
     def get(cls):
@@ -802,7 +814,7 @@ class cfgDialog(QDialog):
         super().accept()
 
     def reset(self):
-        ffConfig().init()
+        ffConfig.init()
         self.refresh()
 
     def changed(self, _=True):
@@ -814,23 +826,13 @@ class cfgDialog(QDialog):
                             options=QFileDialog.DontUseNativeDialog)
         if not fn:
             return
-        fconf = ConfigParser(allow_no_value=True, defaults=self.cfg)
-        try:
-            cf = fconf.read(fn)
-            for option in fconf.options('Default'):
-                self.cfg[option] = fconf.get('Default', option)
-            self.cfg['conffile'] = fn
-        except Exception as e:
-            eprint(1, str(e), '(config file', self.cfg['conffile'], 'missing or corrupt)')
-            eprint(0, str(e))
+        if not ffConfig.load_cfgfile(self.cfg, fn, self.cfg['verbosity']):
             mbox = QMessageBox(self)
             mbox.setWindowTitle('Load Preferences Failed')
             mbox.setIcon(QMessageBox.Critical)
             mbox.setStandardButtons(QMessageBox.Ok)
             mbox.setText(str(e))
             mbox.exec_()
-        else:
-            eprint(1, 'read config from', self.cfg['conffile'])
         self.changed()
 
     def save(self):
@@ -850,7 +852,7 @@ class cfgDialog(QDialog):
             lines = ['[Default]']
         for o in self.opt:
             found = False
-            repl = '%s=%s' % (o[0], self.cfg[o[0]])
+            repl = '%s=%s' % (o[0], str(self.cfg[o[0]]))
             for i in range(len(lines)):
                 if re.match('^\w*%s\w*=' % o[0], lines[i]):
                     lines[i] = repl

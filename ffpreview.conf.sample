@@ -24,8 +24,9 @@ outdir=
 # Width in pixels for generated thumbnails.
 thumb_width=192
 
-# Initial thumbnail grid geometry, format: Columns[xRows].
-grid=5x4
+# Initial thumbnail grid geometry.
+grid_columns=5
+grid_rows=4
 
 # Path to ffprobe executable.
 ffprobe=ffprobe

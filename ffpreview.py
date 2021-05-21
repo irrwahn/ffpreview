@@ -162,8 +162,12 @@ class ffConfig:
                     '*.ogg *.ogv *.ogv *.qt *.rmvb *.vob *.webm *.wmv'
     }
     def __new__(cls):
-        if cls.cfg:
-            return cls
+        if cls.cfg is None:
+            cls.init()
+        return cls
+
+    @classmethod
+    def init(cls):
         # initialize default values
         if cls.cfg_dflt['platform'] == 'Windows':
             cls.cfg_dflt['env']['PATH'] = sys.path[0] + os.pathsep + cls.cfg_dflt['env']['PATH']
@@ -235,9 +239,9 @@ class ffConfig:
                 cfg['conffile']
             )
         fconf = ConfigParser(allow_no_value=True, defaults=cfg)
-        cf = fconf.read([cfg['conffile']])
         try:
             vo = args.verbose if args.verbose else 0
+            cf = fconf.read([cfg['conffile']])
             for option in fconf.options('Default'):
                 cfg[option] = fconf.get('Default', option)
         except Exception as e:
@@ -247,6 +251,8 @@ class ffConfig:
         # fix up types of non-string options
         cfg['force'] = str2bool(cfg['force'])
         cfg['reuse'] = str2bool(cfg['reuse'])
+        cfg['grid_rows'] = str2int(cfg['grid_rows'])
+        cfg['grid_columns'] = str2int(cfg['grid_columns'])
         cfg['thumb_width'] = str2int(cfg['thumb_width'])
         cfg['frame_skip'] = str2int(cfg['frame_skip'])
         cfg['time_skip'] = str2float(cfg['time_skip'])
@@ -295,16 +301,10 @@ class ffConfig:
         # prepare output directory
         if not cfg['outdir']:
             cfg['outdir'] = tempfile.gettempdir()
-        cfg['outdir'] = os.path.join(cfg['outdir'], 'ffpreview_thumbs')
-        try:
-            os.makedirs(cfg['outdir'], exist_ok=True)
-        except Exception as e:
-            eprint(0, str(e))
-            die(1)
+        cfg['outdir'] = make_outdir(cfg['outdir'])
         eprint(1, 'outdir =', cfg['outdir'])
         # commit to successfully prepared config
-        cls.cfg = cfg
-        return cls
+        return cls.set(cfg)
 
     @classmethod
     def get(cls):
@@ -312,22 +312,22 @@ class ffConfig:
 
     @classmethod
     def set(cls, newcfg=None):
-        if newcfg:
-            cls.cfg = deepcopy(newcfg)
-            return cls.cfg
-        return None
+        if cls.cfg:
+            cls.cfg.clear()
+        cls.update(newcfg)
+        return cls.cfg
 
     @classmethod
     def update(cls, updcfg=None):
+        if cls.cfg is None:
+            cls.cfg = {}
         if updcfg:
-            cls.cfg.update(updcfg)
-            return cls.cfg
-        return None
+            cls.cfg.update(deepcopy(updcfg))
+        return cls.cfg
 
     @classmethod
     def get_defaults(cls):
-        cfg = deepcopy(cls.cfg_dflt)
-        return cfg
+        return deepcopy(cls.cfg_dflt)
 
 
 ############################################################
@@ -421,6 +421,11 @@ sjbrv0by1GL02mXkxFqObj7v0mPu1GPu1WPkvTvWnRC2fg6jbA60dArZjgvpuUjwzV+8lTvCspjqzFzr
 ALM2VEBTR0eXGSSgp6eipq6vY6BraGTMzMDCwKxqYmpmbmFpZW1jY8vMwMrGbmfv4Ojk7OLq5u7hyczAwcnl5e0DAr5+/gFAAe7AoODgkNCw8IjIyKhooABPTGxcfEJiUnJKalpaegYzA29mVnZObl5+QWFRcUlpGRMDX3lFZVV1jWdtXX1DY1MzP4OAoFBLa1t7R2dX
 d09vn7AIg6iYeP8ED8/azq6JkzolJBlAfpk8ZSpQYNr0GVLSID6DjOzMWbNqZ8+RkwfLMzAoyID9z8QvAuIBALefO7A/pgxdAAAAAElFTkSuQmCC
 """
+    save_png = """iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAA9lBMVEX///9NmQRPmQZOmgZOmAROmQZOmgZMmAVOmgZOmwZOmgZOmgZOmgZOmgVOmQZPnAdQmwhOmwau339yxSFOmgbQ866K4jSu4nu66Y11uDZ6uzy76o6c2mCX2lef51nH8Z/Q862d51ac5lN4zSdt
+wB6M4Tif51iJ4DNtvh2/wbuChYZATD9FfRNaqRB70ClaqA8xPzEuNDa6vbbT1ND////29/X19vT7+/r+/v75+vj09fPv8O3p6+fj5uK1uLGkpqHv8O/k5eLh4d/t7ezNzsri4+Dl5uSdoJqGiYPr7OrQ0c65ureQko2IioWNj4tvcW3x8vFYWlaeE5PLAAAAEnRSTlMA
+PNPFPt3IL9fL4czKvs7w7S42D9ScAAAAjUlEQVQY02NgAANGJmYWBmTAKiTMhiIgIiomQpEAOwcnSICLG2YRj7iEpKiYlLQML1SAT1ZOXkFMUUmZGSrAwq+iqiamriEgCOFramnr6Orp6esYGBqBBYxNTM3MLSytrG1s7cAC9g6OTiYmJs4urm7uYAEPT1cvbx9fPxdX
+Tw+wgH8AHPiDBQKRAAMDAFjyF6ty/R1iAAAAAElFTkSuQmCC
+"""
     warning_png = """iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAABQVBMVEX////6sgX8sQb8uQX7uUD5uAX7sw36rgv9uQL6tgX6tQ35sgn7twT5tAT3tBH3sA33sgH2rwH/mQD0qgjyqQb/zADzowHzpAH/ogDwmg7wmQroogDwkgDwkQDpdwDqfATpegLrggblZgDmbgbo
 eQD7vlL/16v+06X8vlL/2q7/1qX8u0r/0o3LbzjLbjb+y3j7wUj/0oC8RxL/zGf7vTj+0mr/0mXDSRP/zkv+y0X6wTP/1VH/1lLMViLOWyn/1UD/1Dn5wSv+yQX/zgD/0QDddRXccg//1gD/1wD+1Af3uhD/2AD/3AD/4AD/4gD/5AD/5QD/4wD3wBD+3AX/6AD/7QDm
 fxD/8wD/8QD+5gn2vBf/6gD/7wD/9ADqfxHqgBH/9wD/8gD2vhf92CT/5hf/5gD/6QD/7AD/5wD/4xf92yY5YL/DAAAAJXRSTlMAY1VX/lzn6Wtv7O17fvHyiYsF9vYFmZcL+voLqKbq6pb49/aTMf8OLAAAAJ5JREFUGNNjYMABGJlQ+cwsqqwoAmxq6uzIfA4NTS1t
@@ -431,8 +436,8 @@ TiQBLh1dPX1uBJ/HwNDIyNiEFy7AZ2pmbm5hyQ/jC1hZ29ja2Ts4CkL4QsJOzi6ubu4eniKiYAExL28f
             return
         cls.initialized = True
         # NOTE: commented icons are currently unused
-        #cls.apply_pxm = sQPixmap(imgdata=ffIcon.apply_png)
-        #cls.apply = QIcon(ffIcon.apply_pxm)
+        cls.apply_pxm = sQPixmap(imgdata=ffIcon.apply_png)
+        cls.apply = QIcon(ffIcon.apply_pxm)
         cls.broken_pxm = sQPixmap(imgdata=ffIcon.broken_png)
         cls.broken = QIcon(ffIcon.broken_pxm)
         cls.close_pxm = sQPixmap(imgdata=ffIcon.close_png)
@@ -457,6 +462,8 @@ TiQBLh1dPX1uBJ/HwNDIyNiEFy7AZ2pmbm5hyQ/jC1hZ29ja2Ts4CkL4QsJOzi6ubu4eniKiYAExL28f
         cls.remove = QIcon(ffIcon.remove_pxm)
         cls.revert_pxm = sQPixmap(imgdata=ffIcon.revert_png)
         cls.revert = QIcon(ffIcon.revert_pxm)
+        cls.save_xpm = sQPixmap(imgdata=ffIcon.save_png)
+        cls.save = QIcon(ffIcon.save_xpm)
         #cls.warning_pxm = sQPixmap(imgdata=ffIcon.warning_png)
         #cls.warning = QIcon(ffIcon.warning_pxm)
 
@@ -719,6 +726,191 @@ class tmDialog(QDialog):
         return self.loadfile
 
 
+class cfgDialog(QDialog):
+    ilist = []
+    outdir = ''
+    loadfile = ''
+    opt = [ ['outdir', 'sdir'],
+            ['ffprobe', 'sfile'],
+            ['ffmpeg', 'sfile'],
+            ['player', 'sfile'],
+            ['plpaused', 'sfile'],
+            ['grid_columns', 'spin'],
+            ['grid_rows', 'spin'],
+            ['force', 'check'],
+            ['reuse', 'check'],
+            ['thumb_width', 'spin'],
+            ['start', 'time'],
+            ['end', 'time'],
+            ['method', 'mcombo'],
+            ['frame_skip', 'spin'],
+            ['time_skip', 'spin'],
+            ['scene_thresh', 'dblspin'],
+            ['customvf', 'edit'] ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setWindowTitle("Preferences")
+        self.table_widget = QTableWidget()
+        self.table_widget.setSelectionMode(QAbstractItemView.NoSelection)
+        self.table_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.table_widget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table_widget.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.table_widget.horizontalHeader().setVisible(False)
+        self.table_widget.setShowGrid(False)
+        self.table_widget.setStyleSheet('QTableView::item {border-bottom: 1px solid lightgrey;}')
+        self.table_widget.setRowCount(len(self.opt))
+        self.table_widget.setColumnCount(1)
+        self.resize(self.table_widget.width() + 150, self.table_widget.height()+100)
+        self.btn_layout = QHBoxLayout()
+        self.reset_button = QPushButton("Reset")
+        self.reset_button.setIcon(ffIcon.revert)
+        self.reset_button.clicked.connect(self.reset)
+        self.apply_button = QPushButton("Apply")
+        self.apply_button.setIcon(ffIcon.apply)
+        self.apply_button.clicked.connect(self.apply)
+        self.save_button = QPushButton("Save")
+        self.save_button.setIcon(ffIcon.save)
+        self.save_button.clicked.connect(self.save)
+        self.close_button = QPushButton("Cancel")
+        self.close_button.setIcon(ffIcon.close)
+        self.close_button.clicked.connect(self.reject)
+        self.ok_button = QPushButton("Ok")
+        self.ok_button.setIcon(ffIcon.ok)
+        self.ok_button.clicked.connect(self.accept)
+        self.ok_button.setDefault(True)
+        self.btn_layout.addWidget(self.reset_button)
+        self.btn_layout.addStretch()
+        self.btn_layout.addWidget(self.apply_button)
+        self.btn_layout.addWidget(self.save_button)
+        self.btn_layout.addWidget(self.close_button)
+        self.btn_layout.addWidget(self.ok_button)
+        self.dlg_layout = QVBoxLayout(self)
+        self.dlg_layout.addWidget(self.table_widget)
+        self.dlg_layout.addLayout(self.btn_layout)
+        self.refresh()
+
+    def accept(self):
+        self.apply()
+        super().accept()
+
+    def reset(self):
+        ffConfig().init()
+        self.refresh()
+
+    def save(self):
+        self.apply()
+        eprint(1, 'save config to:', self.cfg['conffile'])
+        try:
+            with open(self.cfg['conffile']) as file:
+                lines = [line.rstrip() for line in file]
+        except:
+            lines = ['[Default]']
+        for o in self.opt:
+            found = False
+            repl = '%s=%s' % (o[0], self.cfg[o[0]])
+            for i in range(len(lines)):
+                if re.match('^\w*%s\w*=' % o[0], lines[i]):
+                    lines[i] = repl
+                    found = True
+                    break
+            if not found:
+                lines.append(repl)
+        with open(self.cfg['conffile'],'wt') as file:
+            file.write('\n'.join(lines))
+        if self.cfg['verbosity'] > 2:
+            for line in lines:
+                eprint(3, line)
+
+    def apply(self):
+        for i in range(len(self.opt)):
+            o = self.opt[i]
+            w = self.table_widget.cellWidget(i, 0)
+            if o[1] == 'sdir' or o[1] == 'sfile':
+                self.cfg[o[0]] = w.children()[1].text()
+            elif o[1] == 'edit':
+                self.cfg[o[0]] = w.text()
+            elif o[1] == 'spin' or o[1] == 'dblspin':
+                self.cfg[o[0]] = w.value()
+            elif o[1] == 'check':
+                self.cfg[o[0]] = w.isChecked()
+            elif o[1] == 'time':
+                t = w.time()
+                self.cfg[o[0]] = t.hour()*3600 + t.minute()*60 + t.second() + t.msec()/1000
+            elif o[1] == 'mcombo':
+                self.cfg[o[0]] = w.currentText()
+            eprint(3, 'apply:', o[0], '=', self.cfg[o[0]])
+        self.cfg['outdir'] = make_outdir(self.cfg['outdir'])
+        ffConfig.update(self.cfg)
+        self.refresh()
+
+    def _fs_browse(self, path, dironly=False):
+        def _filedlg():
+            if dironly:
+                fn = QFileDialog.getExistingDirectory(self, 'Open Directory',
+                    path, QFileDialog.ShowDirsOnly | QFileDialog.DontUseNativeDialog)
+            else:
+                fn, _ = QFileDialog.getOpenFileName(self, 'Open File', path,
+                            options=QFileDialog.DontUseNativeDialog)
+            print(fn)
+            edit.setText(fn)
+        widget = QWidget()
+        edit = QLineEdit(path)
+        browse = QPushButton()
+        browse.setText("Browse")
+        browse.clicked.connect(_filedlg)
+        layout = QHBoxLayout()
+        layout.addWidget(edit)
+        layout.addWidget(browse)
+        layout.setContentsMargins(0, 0, 0, 0)
+        widget.setLayout(layout)
+        return widget
+
+    def refresh(self):
+        self.cfg = ffConfig.get()
+        self.table_widget.setUpdatesEnabled(False)
+        for i in range(len(self.opt)):
+            o = self.opt[i]
+            eprint(3, 'refresh:', o[0], '=', self.cfg[o[0]])
+            self.table_widget.setVerticalHeaderItem(i, QTableWidgetItem(o[0]))
+            if o[1] == 'sdir':
+                w = self._fs_browse(self.cfg[o[0]], True)
+            elif o[1] == 'sfile':
+                w = self._fs_browse(self.cfg[o[0]])
+            elif o[1] == 'edit':
+                w = QLineEdit(self.cfg[o[0]])
+            elif o[1] == 'spin':
+                w = QSpinBox()
+                w.setRange(1, 9999)
+                w.setValue(self.cfg[o[0]])
+            elif o[1] == 'dblspin':
+                w = QDoubleSpinBox()
+                w.setRange(0.0, 1.0)
+                w.setSingleStep(0.05)
+                w.setDecimals(2)
+                w.setValue(self.cfg[o[0]])
+            elif o[1] == 'check':
+                w = QCheckBox()
+                w.setTristate(False)
+                w.setCheckState(2 if self.cfg[o[0]] else 0)
+            elif o[1] == 'time':
+                rs = self.cfg[o[0]]
+                s = round(rs, 0)
+                ms = (rs - s) * 1000
+                h = s / 3600
+                s = s % 3600
+                m = s / 60
+                s = s % 60
+                w = QTimeEdit(QTime(h, m, s, ms))
+                w.setDisplayFormat('hh:mm:ss.zzz')
+            elif o[1] == 'mcombo':
+                w = QComboBox()
+                w.addItems(['iframe', 'scene', 'skip', 'time', 'customvf'])
+                w.setCurrentIndex(w.findText(self.cfg[o[0]]))
+            self.table_widget.setCellWidget(i, 0, w)
+        self.table_widget.setUpdatesEnabled(True)
+
+
 class sMainWindow(QMainWindow):
     """ Application main window class singleton. """
     _instance = None
@@ -852,6 +1044,7 @@ class sMainWindow(QMainWindow):
                 menu.addAction('Force Rebuild', self.force_rebuild)
             menu.addAction('Optimize Window Extent', self.optimize_extent)
             menu.addAction('Thumbnail Manager', lambda: self.manage_thumbs(cfg['outdir']))
+            menu.addAction('Preferences', lambda: self.config_dlg())
         else:
             menu.addAction('Abort Operation', self.abort_build)
         menu.addSeparator()
@@ -867,6 +1060,16 @@ class sMainWindow(QMainWindow):
             lfile = dlg.get_loadfile()
             if lfile:
                 self.load_view(lfile)
+
+    def config_dlg(self):
+        if self.view_locked:
+            return
+        gr = cfg['grid_rows']
+        gc = cfg['grid_columns']
+        dlg = cfgDialog(self)
+        res = dlg.exec_()
+        if res == QDialog.Accepted:
+            self.load_view(self.fname)
 
     def _play_video(self, ts=None, paused=False):
         if self.view_locked:
@@ -957,6 +1160,8 @@ class sMainWindow(QMainWindow):
         QShortcut('Return', self).activated.connect(lambda: self._play_video(paused=True))
         QShortcut('Shift+Return', self).activated.connect(lambda: self._play_video())
         QShortcut('Ctrl+Return', self).activated.connect(lambda: self.contextMenuEvent(None))
+        QShortcut('Ctrl+Alt+P', self).activated.connect(lambda: self.config_dlg())
+
 
     def show_progress(self, n, tot):
         self.statdsp[1].setText('%d / %d' % (n, tot))
@@ -1372,6 +1577,19 @@ def get_thinfo(vfile, thdir):
         if chk:
             return chk, True
     return thinfo, False
+
+# create output directory
+def make_outdir(outdir):
+    suffix = 'ffpreview_thumbs'
+    if os.path.basename(outdir) != suffix:
+        outdir = os.path.join(outdir, suffix)
+    try:
+        os.makedirs(outdir, exist_ok=True)
+        eprint(1, 'outdir', outdir, 'ok')
+    except Exception as e:
+        eprint(0, str(e))
+        return False
+    return outdir
 
 # clear out thumbnail directory
 def clear_thumbdir(thdir):

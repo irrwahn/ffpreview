@@ -831,8 +831,9 @@ class cfgDialog(QDialog):
             mbox.setWindowTitle('Load Preferences Failed')
             mbox.setIcon(QMessageBox.Critical)
             mbox.setStandardButtons(QMessageBox.Ok)
-            mbox.setText('%s:\nFile inaccessible or corrupt.' % fname)
+            mbox.setText('%s:\nFile inaccessible or corrupt.' % fn)
             mbox.exec_()
+        self.refresh_view()
         self.changed()
 
     def save(self):
@@ -908,7 +909,8 @@ class cfgDialog(QDialog):
             else:
                 fn, _ = QFileDialog.getOpenFileName(self, 'Open File', path,
                             options=QFileDialog.DontUseNativeDialog)
-            edit.setText(fn)
+            if fn:
+                edit.setText(fn)
         widget = QWidget()
         edit = QLineEdit(path)
         edit.textChanged.connect(self.changed)
@@ -923,6 +925,9 @@ class cfgDialog(QDialog):
 
     def refresh(self):
         self.cfg = ffConfig.get()
+        self.refresh_view()
+
+    def refresh_view(self):
         self.table_widget.setUpdatesEnabled(False)
         for i in range(len(self.opt)):
             o = self.opt[i]

@@ -295,7 +295,7 @@ class ffConfig:
         return cls.set(cfg)
 
     @classmethod
-    def load_cfgfile(cls, cfg=cls.cfg, fname=cls.cfg['conffile'], vo=1):
+    def load_cfgfile(cls, cfg, fname, vo=1):
         fconf = ConfigParser(allow_no_value=True, defaults=cfg)
         try:
             cf = fconf.read(fname)

@@ -616,24 +616,30 @@ class tmDialog(QDialog):
         self.btn_layout = QHBoxLayout()
         self.load_button = QPushButton("Load Thumbnails")
         self.load_button.setIcon(ffIcon.open)
+        self.load_button.setToolTip('Load selected video thumbnail preview')
         self.load_button.clicked.connect(self.accept)
         self.load_button.setEnabled(False)
         self.load_button.setDefault(True)
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.setIcon(ffIcon.refresh)
+        self.refresh_button.setToolTip('Rescan the thumbnail library and update list')
         self.refresh_button.clicked.connect(self.refresh_list)
         self.invert_button = QPushButton("Invert Selection")
         self.invert_button.setIcon(ffIcon.revert)
+        self.invert_button.setToolTip('Invert the current selection')
         self.invert_button.clicked.connect(self.invert_selection)
         self.selbroken_button = QPushButton("Select Broken")
         self.selbroken_button.setIcon(ffIcon.remove)
+        self.selbroken_button.setToolTip('Select orphaned or otherwise corrupted thumbnail directories')
         self.selbroken_button.clicked.connect(self.select_broken)
         self.remove_button = QPushButton("Remove Selected")
         self.remove_button.setIcon(ffIcon.delete)
+        self.remove_button.setToolTip('Remove selected preview thumbnail directories')
         self.remove_button.clicked.connect(self.remove)
         self.remove_button.setEnabled(False)
         self.close_button = QPushButton("Close")
         self.close_button.setIcon(ffIcon.close)
+        self.close_button.setToolTip('Close thumbnail manager')
         self.close_button.clicked.connect(self.reject)
         self.btn_layout.addWidget(self.refresh_button)
         self.btn_layout.addWidget(self.invert_button)
@@ -745,23 +751,23 @@ class cfgDialog(QDialog):
     ilist = []
     outdir = ''
     loadfile = ''
-    opt = [ ['outdir', 'sdir'],
-            ['ffprobe', 'sfile'],
-            ['ffmpeg', 'sfile'],
-            ['player', 'sfile'],
-            ['plpaused', 'sfile'],
-            ['grid_columns', 'spin'],
-            ['grid_rows', 'spin'],
-            ['force', 'check'],
-            ['reuse', 'check'],
-            ['thumb_width', 'spin'],
-            ['start', 'time'],
-            ['end', 'time'],
-            ['method', 'mcombo'],
-            ['frame_skip', 'spin'],
-            ['time_skip', 'spin'],
-            ['scene_thresh', 'dblspin'],
-            ['customvf', 'edit'] ]
+    opt = [ ['outdir', 'sdir', 'Thumbnail storage directory'],
+            ['ffprobe', 'sfile', 'Command to start ffprobe'],
+            ['ffmpeg', 'sfile', 'Command to start ffmpeg'],
+            ['player', 'sfile', 'Command to open video player'],
+            ['plpaused', 'sfile', 'Command to open player in paused mode'],
+            ['grid_columns', 'spin', 'Number of columns in thumbnail view'],
+            ['grid_rows', 'spin', 'Number of rows in thumbnail view'],
+            ['force', 'check', 'Forcibly rebuild preview when opening a file'],
+            ['reuse', 'check', 'If possible, reuse existing thumbnail parameters when viewing'],
+            ['thumb_width', 'spin', 'Width in pixel for thumbnail creation'],
+            ['start', 'time', 'Start time for thumbnail creation'],
+            ['end', 'time', 'End time for thumbnail creation'],
+            ['method', 'mcombo', 'Select video filter method for thumbnail creation'],
+            ['frame_skip', 'spin', 'Number of frames to skip for method \'skip\''],
+            ['time_skip', 'spin', 'Number of seconds to skip for method \'time\''],
+            ['scene_thresh', 'dblspin', 'Scene detection threshold for method \'scene\''],
+            ['customvf', 'edit', 'Filter expression for method \'customvf\''] ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -780,21 +786,27 @@ class cfgDialog(QDialog):
         self.btn_layout = QHBoxLayout()
         self.reset_button = QPushButton('Reset')
         self.reset_button.setIcon(ffIcon.revert)
+        self.reset_button.setToolTip('Revert to previous settings')
         self.reset_button.clicked.connect(self.reset)
         self.load_button = QPushButton('Load')
         self.load_button.setIcon(ffIcon.open)
+        self.load_button.setToolTip('Load settings from file')
         self.load_button.clicked.connect(self.load)
         self.apply_button = QPushButton('Apply')
         self.apply_button.setIcon(ffIcon.apply)
+        self.apply_button.setToolTip('Apply current changes')
         self.apply_button.clicked.connect(self.apply)
         self.save_button = QPushButton('Save')
         self.save_button.setIcon(ffIcon.save)
+        self.save_button.setToolTip('Apply current changes and save to file')
         self.save_button.clicked.connect(self.save)
         self.close_button = QPushButton('Cancel')
         self.close_button.setIcon(ffIcon.error)
+        self.close_button.setToolTip('Close dialog without applying changes')
         self.close_button.clicked.connect(self.reject)
         self.ok_button = QPushButton('Ok')
         self.ok_button.setIcon(ffIcon.ok)
+        self.ok_button.setToolTip('Apply current changes and close dialog')
         self.ok_button.clicked.connect(self.accept)
         self.ok_button.setDefault(True)
         self.btn_layout.addWidget(self.reset_button)
@@ -933,17 +945,22 @@ class cfgDialog(QDialog):
             o = self.opt[i]
             eprint(3, 'refresh:', o[0], '=', self.cfg[o[0]])
             self.table_widget.setVerticalHeaderItem(i, QTableWidgetItem(o[0]))
+            self.table_widget.verticalHeaderItem(i).setToolTip(o[2])
             if o[1] == 'sdir':
                 w = self._fs_browse(self.cfg[o[0]], dironly=True)
+                w.setToolTip(o[2])
             elif o[1] == 'sfile':
                 w = self._fs_browse(self.cfg[o[0]])
+                w.setToolTip(o[2])
             elif o[1] == 'edit':
                 w = QLineEdit(self.cfg[o[0]])
+                w.setToolTip(o[2])
                 w.textChanged.connect(self.changed)
             elif o[1] == 'spin':
                 w = QSpinBox()
                 w.setRange(1, 9999)
                 w.setValue(self.cfg[o[0]])
+                w.setToolTip(o[2])
                 w.valueChanged.connect(self.changed)
             elif o[1] == 'dblspin':
                 w = QDoubleSpinBox()
@@ -951,11 +968,13 @@ class cfgDialog(QDialog):
                 w.setSingleStep(0.05)
                 w.setDecimals(2)
                 w.setValue(self.cfg[o[0]])
+                w.setToolTip(o[2])
                 w.valueChanged.connect(self.changed)
             elif o[1] == 'check':
                 w = QCheckBox()
                 w.setTristate(False)
                 w.setCheckState(2 if self.cfg[o[0]] else 0)
+                w.setToolTip(o[2])
                 w.stateChanged.connect(self.changed)
             elif o[1] == 'time':
                 rs = self.cfg[o[0]]
@@ -967,11 +986,13 @@ class cfgDialog(QDialog):
                 s = s % 60
                 w = QTimeEdit(QTime(h, m, s, ms))
                 w.setDisplayFormat('hh:mm:ss.zzz')
+                w.setToolTip(o[2])
                 w.timeChanged.connect(self.changed)
             elif o[1] == 'mcombo':
                 w = QComboBox()
                 w.addItems(['iframe', 'scene', 'skip', 'time', 'customvf'])
                 w.setCurrentIndex(w.findText(self.cfg[o[0]]))
+                w.setToolTip(o[2])
                 w.currentIndexChanged.connect(self.changed)
             self.table_widget.setCellWidget(i, 0, w)
         self.table_widget.setUpdatesEnabled(True)

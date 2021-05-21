@@ -5,13 +5,12 @@
 [Default]
 
 # Output directory path.
-# In this location a subdirectory named "ffpreview_thumbs" will be
-# created, where a separate subdirectory is placed for each individual
+# "/ffpreview_thumbs" is appended to this path, if not already present.
+# In this location a separate subdirectory is placed for each individual
 # video file processed. The default is to try to locate a suitable
 # temporary location, depending on the operating system.
 # Example:
-#   outdir=/ext/data
-# will produce the following directory structure:
+#   outdir=/ext/data  will produce the following directory structure:
 #   /
 #   +--ext
 #   |  +--data

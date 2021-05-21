@@ -145,10 +145,10 @@ class ffConfig:
         'force': 'False',
         'reuse': 'False',
         'method': 'iframe',
-        'frame_skip': '-1',
-        'time_skip': '-1',
-        'scene_thresh': '-1',
-        'customvf': '',
+        'frame_skip': '200',
+        'time_skip': '60',
+        'scene_thresh': '0.2',
+        'customvf': 'scdet=s=1:t=12',
         'start': '0',
         'end': '0',
         'verbosity': 0,
@@ -189,6 +189,7 @@ class ffConfig:
                    '  Ctrl+G            adjust window geometry for optimal fit\n'
                    '  Ctrl+O            show open file dialog\n'
                    '  Ctrl+M            open thumbnail manager\n'
+                   '  Ctrl+Alt+P        open preferences dialog\n'
                    '  Double-click,\n'
                    '  Return, Space     open video at selected position in paused state\n'
                    '  Shift+dbl-click,\n'
@@ -647,6 +648,7 @@ class tmDialog(QDialog):
 
     def refresh_list(self):
         self.ilist = get_indexfiles(self.outdir)
+        self.tree_widget.setUpdatesEnabled(False)
         self.tree_widget.clear()
         ncols = self.tree_widget.columnCount()
         total_size = 0
@@ -675,6 +677,7 @@ class tmDialog(QDialog):
             self.tree_widget.resizeColumnToContents(col)
         self.tot_label.setText('~ ' + hr_size(total_size, 0))
         self.selbroken_button.setEnabled(cnt_broken > 0)
+        self.tree_widget.setUpdatesEnabled(True)
 
     def select_broken(self):
         for i in range(self.tree_widget.topLevelItemCount()):
@@ -750,7 +753,7 @@ class cfgDialog(QDialog):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.setWindowTitle("Preferences")
+        self.setWindowTitle('Preferences')
         self.table_widget = QTableWidget()
         self.table_widget.setSelectionMode(QAbstractItemView.NoSelection)
         self.table_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -763,23 +766,27 @@ class cfgDialog(QDialog):
         self.table_widget.setColumnCount(1)
         self.resize(self.table_widget.width() + 150, self.table_widget.height()+100)
         self.btn_layout = QHBoxLayout()
-        self.reset_button = QPushButton("Reset")
+        self.reset_button = QPushButton('Reset')
         self.reset_button.setIcon(ffIcon.revert)
         self.reset_button.clicked.connect(self.reset)
-        self.apply_button = QPushButton("Apply")
+        self.load_button = QPushButton('Load')
+        self.load_button.setIcon(ffIcon.open)
+        self.load_button.clicked.connect(self.load)
+        self.apply_button = QPushButton('Apply')
         self.apply_button.setIcon(ffIcon.apply)
         self.apply_button.clicked.connect(self.apply)
-        self.save_button = QPushButton("Save")
+        self.save_button = QPushButton('Save')
         self.save_button.setIcon(ffIcon.save)
         self.save_button.clicked.connect(self.save)
-        self.close_button = QPushButton("Cancel")
-        self.close_button.setIcon(ffIcon.close)
+        self.close_button = QPushButton('Cancel')
+        self.close_button.setIcon(ffIcon.error)
         self.close_button.clicked.connect(self.reject)
-        self.ok_button = QPushButton("Ok")
+        self.ok_button = QPushButton('Ok')
         self.ok_button.setIcon(ffIcon.ok)
         self.ok_button.clicked.connect(self.accept)
         self.ok_button.setDefault(True)
         self.btn_layout.addWidget(self.reset_button)
+        self.btn_layout.addWidget(self.load_button)
         self.btn_layout.addStretch()
         self.btn_layout.addWidget(self.apply_button)
         self.btn_layout.addWidget(self.save_button)
@@ -798,13 +805,48 @@ class cfgDialog(QDialog):
         ffConfig().init()
         self.refresh()
 
-    def save(self):
-        self.apply()
-        eprint(1, 'save config to:', self.cfg['conffile'])
+    def changed(self, _=True):
+        self.reset_button.setEnabled(True)
+
+    def load(self):
+        fn, _ = QFileDialog.getOpenFileName(self, 'Load Preferences', self.cfg['conffile'],
+                            'Config Files (*.conf);;All Files (*)',
+                            options=QFileDialog.DontUseNativeDialog)
+        if not fn:
+            return
+        fconf = ConfigParser(allow_no_value=True, defaults=self.cfg)
         try:
-            with open(self.cfg['conffile']) as file:
+            cf = fconf.read(fn)
+            for option in fconf.options('Default'):
+                self.cfg[option] = fconf.get('Default', option)
+            self.cfg['conffile'] = fn
+        except Exception as e:
+            eprint(1, str(e), '(config file', self.cfg['conffile'], 'missing or corrupt)')
+            eprint(0, str(e))
+            mbox = QMessageBox(self)
+            mbox.setWindowTitle('Load Preferences Failed')
+            mbox.setIcon(QMessageBox.Critical)
+            mbox.setStandardButtons(QMessageBox.Ok)
+            mbox.setText(str(e))
+            mbox.exec_()
+        else:
+            eprint(1, 'read config from', self.cfg['conffile'])
+        self.changed()
+
+    def save(self):
+        fn, _ = QFileDialog.getSaveFileName(self, 'Save Preferences', self.cfg['conffile'],
+                            'Config Files (*.conf);;All Files (*)',
+                            options=QFileDialog.DontUseNativeDialog)
+        if not fn:
+            return
+        eprint(1, 'saving config to:', self.cfg['conffile'])
+        try:
+            with open(fn) as file:
                 lines = [line.rstrip() for line in file]
         except:
+            eprint(1, str(e))
+            lines = []
+        if '[Default]' not in lines:
             lines = ['[Default]']
         for o in self.opt:
             found = False
@@ -816,11 +858,23 @@ class cfgDialog(QDialog):
                     break
             if not found:
                 lines.append(repl)
-        with open(self.cfg['conffile'],'wt') as file:
-            file.write('\n'.join(lines))
+        lines.append('')
+        cont = '\n'.join(lines)
+        try:
+            with open(fn, 'wt') as file:
+                file.write(cont)
+            self.cfg['conffile'] = fn
+        except Exception as e:
+            eprint(0, str(e))
+            mbox = QMessageBox(self)
+            mbox.setWindowTitle('Save Preferences Failed')
+            mbox.setIcon(QMessageBox.Critical)
+            mbox.setStandardButtons(QMessageBox.Ok)
+            mbox.setText(str(e))
+            mbox.exec_()
         if self.cfg['verbosity'] > 2:
-            for line in lines:
-                eprint(3, line)
+            eprint(3, cont)
+        self.apply()
 
     def apply(self):
         for i in range(len(self.opt)):
@@ -852,12 +906,11 @@ class cfgDialog(QDialog):
             else:
                 fn, _ = QFileDialog.getOpenFileName(self, 'Open File', path,
                             options=QFileDialog.DontUseNativeDialog)
-            print(fn)
             edit.setText(fn)
         widget = QWidget()
         edit = QLineEdit(path)
-        browse = QPushButton()
-        browse.setText("Browse")
+        edit.textChanged.connect(self.changed)
+        browse = QPushButton('Browse...')
         browse.clicked.connect(_filedlg)
         layout = QHBoxLayout()
         layout.addWidget(edit)
@@ -874,25 +927,29 @@ class cfgDialog(QDialog):
             eprint(3, 'refresh:', o[0], '=', self.cfg[o[0]])
             self.table_widget.setVerticalHeaderItem(i, QTableWidgetItem(o[0]))
             if o[1] == 'sdir':
-                w = self._fs_browse(self.cfg[o[0]], True)
+                w = self._fs_browse(self.cfg[o[0]], dironly=True)
             elif o[1] == 'sfile':
                 w = self._fs_browse(self.cfg[o[0]])
             elif o[1] == 'edit':
                 w = QLineEdit(self.cfg[o[0]])
+                w.textChanged.connect(self.changed)
             elif o[1] == 'spin':
                 w = QSpinBox()
                 w.setRange(1, 9999)
                 w.setValue(self.cfg[o[0]])
+                w.valueChanged.connect(self.changed)
             elif o[1] == 'dblspin':
                 w = QDoubleSpinBox()
                 w.setRange(0.0, 1.0)
                 w.setSingleStep(0.05)
                 w.setDecimals(2)
                 w.setValue(self.cfg[o[0]])
+                w.valueChanged.connect(self.changed)
             elif o[1] == 'check':
                 w = QCheckBox()
                 w.setTristate(False)
                 w.setCheckState(2 if self.cfg[o[0]] else 0)
+                w.stateChanged.connect(self.changed)
             elif o[1] == 'time':
                 rs = self.cfg[o[0]]
                 s = round(rs, 0)
@@ -903,12 +960,15 @@ class cfgDialog(QDialog):
                 s = s % 60
                 w = QTimeEdit(QTime(h, m, s, ms))
                 w.setDisplayFormat('hh:mm:ss.zzz')
+                w.timeChanged.connect(self.changed)
             elif o[1] == 'mcombo':
                 w = QComboBox()
                 w.addItems(['iframe', 'scene', 'skip', 'time', 'customvf'])
                 w.setCurrentIndex(w.findText(self.cfg[o[0]]))
+                w.currentIndexChanged.connect(self.changed)
             self.table_widget.setCellWidget(i, 0, w)
         self.table_widget.setUpdatesEnabled(True)
+        self.reset_button.setEnabled(False)
 
 
 class sMainWindow(QMainWindow):

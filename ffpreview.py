@@ -842,6 +842,7 @@ class cfgDialog(QDialog):
         if not fn:
             return
         eprint(1, 'saving config to:', self.cfg['conffile'])
+        self.apply()
         try:
             with open(fn) as file:
                 lines = [line.rstrip() for line in file]
@@ -876,7 +877,6 @@ class cfgDialog(QDialog):
             mbox.exec_()
         if self.cfg['verbosity'] > 2:
             eprint(3, cont)
-        self.apply()
 
     def apply(self):
         for i in range(len(self.opt)):

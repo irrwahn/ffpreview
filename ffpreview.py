@@ -295,7 +295,7 @@ class ffConfig:
         return cls.set(cfg)
 
     @classmethod
-    def load_cfgfile(cls, cfg, fname, vo):
+    def load_cfgfile(cls, cfg=cls.cfg, fname=cls.cfg['conffile'], vo=1):
         fconf = ConfigParser(allow_no_value=True, defaults=cfg)
         try:
             cf = fconf.read(fname)
@@ -305,7 +305,7 @@ class ffConfig:
             eprint(1, str(e), '(config file', fname, 'missing or corrupt)', vo=vo)
             return False
         else:
-            eprint(1, 'read config from', cfg['conffile'], vo=vo)
+            eprint(1, 'read config from', fname, vo=vo)
         # fix up types of non-string options
         cfg['force'] = str2bool(cfg['force'])
         cfg['reuse'] = str2bool(cfg['reuse'])
@@ -831,7 +831,7 @@ class cfgDialog(QDialog):
             mbox.setWindowTitle('Load Preferences Failed')
             mbox.setIcon(QMessageBox.Critical)
             mbox.setStandardButtons(QMessageBox.Ok)
-            mbox.setText(str(e))
+            mbox.setText('%s:\nFile inaccessible or corrupt.' % fname)
             mbox.exec_()
         self.changed()
 

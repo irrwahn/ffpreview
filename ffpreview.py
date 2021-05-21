@@ -759,7 +759,7 @@ class cfgDialog(QDialog):
             ['plpaused', 'sfile', 'Command to open player in paused mode'],
             ['grid_columns', 'spin', 'Number of columns in thumbnail view'],
             ['grid_rows', 'spin', 'Number of rows in thumbnail view'],
-            ['force', 'check', 'Forcibly rebuild preview when opening a file'],
+            ['force', 'check', 'Forcibly rebuild preview when opening a file (reset after each view load)'],
             ['reuse', 'check', 'If possible, reuse existing thumbnail parameters when viewing'],
             ['thumb_width', 'spin', 'Width in pixel for thumbnail creation'],
             ['start', 'time', 'Start time for thumbnail creation'],
@@ -991,7 +991,7 @@ class cfgDialog(QDialog):
                 w.setToolTip(o[2])
                 w.valueChanged.connect(self.changed)
             elif o[1] == 'check':
-                w = QCheckBox()
+                w = QCheckBox('                          ')
                 w.setTristate(False)
                 w.setCheckState(2 if self.cfg[o[0]] else 0)
                 w.setToolTip(o[2])
@@ -1135,19 +1135,22 @@ class sMainWindow(QMainWindow):
             if self.fname:
                 menu.addAction('Play From Start', lambda: self._play_video(ts='0'))
             menu.addSeparator()
-            if tlabel:
-                menu.addAction('Copy Timestamp [H:M:S.ms]', lambda: self.clipboard.setText(s2hms(tlabel.info[2])))
-                menu.addAction('Copy Timestamp [S.ms]', lambda: self.clipboard.setText(tlabel.info[2]))
-            if self.fname:
-                menu.addAction('Copy Original Filename', lambda: self.clipboard.setText(self.fname))
-            if tlabel:
-                menu.addAction('Copy Thumb Filename', lambda: self.clipboard.setText(os.path.join(self.thdir, tlabel.info[1])))
-                menu.addAction('Copy Thumbnail Image', lambda: self.clipboard.setPixmap(tlabel.layout().itemAt(0).widget().pixmap()))
-            menu.addSeparator()
             menu.addAction('Open Video File...', lambda: self.load_view(self.vpath))
             if self.fname:
                 menu.addAction('Reload', lambda: self.load_view(self.fname))
                 menu.addAction('Force Rebuild', self.force_rebuild)
+            menu.addSeparator()
+            if tlabel or self.fname:
+                copymenu = menu.addMenu('Copy')
+                if tlabel:
+                    copymenu.addAction('Timestamp [H:M:S.ms]', lambda: self.clipboard.setText(s2hms(tlabel.info[2])))
+                    copymenu.addAction('Timestamp [S.ms]', lambda: self.clipboard.setText(tlabel.info[2]))
+                if self.fname:
+                    copymenu.addAction('Original Filename', lambda: self.clipboard.setText(self.fname))
+                if tlabel:
+                    copymenu.addAction('Thumb Filename', lambda: self.clipboard.setText(os.path.join(self.thdir, tlabel.info[1])))
+                    copymenu.addAction('Thumbnail Image', lambda: self.clipboard.setPixmap(tlabel.layout().itemAt(0).widget().pixmap()))
+            menu.addSeparator()
             menu.addAction('Optimize Window Extent', self.optimize_extent)
             menu.addAction('Thumbnail Manager', lambda: self.manage_thumbs(cfg['outdir']))
             menu.addAction('Preferences', lambda: self.config_dlg())
@@ -1324,7 +1327,6 @@ class sMainWindow(QMainWindow):
         if rebuild:
             cfg['force'] = True
             self.load_view(self.fname)
-            cfg['force'] = False
 
     def set_view_locked(self, lock=True):
         self.view_locked = lock
@@ -1408,6 +1410,8 @@ class sMainWindow(QMainWindow):
         self.setMinimumSize(self.tlwidth + self.px, self.tlheight + self.py)
         self.optimize_extent()
         self.set_view_locked(False)
+        # reset force flag to avoid accidental rebuild for every file
+        cfg['force'] = False
 
 
 ############################################################
@@ -1879,8 +1883,6 @@ def main():
         root.manage_thumbs(cfg['outdir'])
     else:
         root.load_view(cfg['vid'][0])
-        # reset force flag to avoid accidental rebuild for every file
-        cfg['force'] = False
     die(app.exec_())
 
 # run application

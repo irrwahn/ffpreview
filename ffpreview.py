@@ -910,7 +910,7 @@ class cfgDialog(QDialog):
             elif o[1] == 'check':
                 self.cfg[o[0]] = w.isChecked()
             elif o[1] == 'time':
-                t = w.time()
+                t = w.children()[1].time()
                 self.cfg[o[0]] = t.hour()*3600 + t.minute()*60 + t.second() + t.msec()/1000
             elif o[1] == 'mcombo':
                 self.cfg[o[0]] = w.currentText()
@@ -937,6 +937,20 @@ class cfgDialog(QDialog):
         layout = QHBoxLayout()
         layout.addWidget(edit)
         layout.addWidget(browse)
+        layout.setContentsMargins(0, 0, 0, 0)
+        widget.setLayout(layout)
+        return widget
+
+    def _time_edit(self, h=0, m=0, s=0, ms=0):
+        widget = QWidget()
+        edit = QTimeEdit(QTime(h, m, s, ms))
+        edit.timeChanged.connect(self.changed)
+        edit.setDisplayFormat('hh:mm:ss.zzz')
+        zero = QPushButton('→ 00:00')
+        zero.clicked.connect(lambda: edit.setTime(QTime(0, 0, 0, 0)))
+        layout = QHBoxLayout()
+        layout.addWidget(edit, 10)
+        layout.addWidget(zero, 1)
         layout.setContentsMargins(0, 0, 0, 0)
         widget.setLayout(layout)
         return widget
@@ -990,10 +1004,8 @@ class cfgDialog(QDialog):
                 s = s % 3600
                 m = s / 60
                 s = s % 60
-                w = QTimeEdit(QTime(h, m, s, ms))
-                w.setDisplayFormat('hh:mm:ss.zzz')
+                w = self._time_edit(h, m, s, ms)
                 w.setToolTip(o[2])
-                w.timeChanged.connect(self.changed)
             elif o[1] == 'mcombo':
                 w = QComboBox()
                 w.addItems(['iframe', 'scene', 'skip', 'time', 'customvf'])
@@ -1158,8 +1170,6 @@ class sMainWindow(QMainWindow):
     def config_dlg(self):
         if self.view_locked:
             return
-        gr = cfg['grid_rows']
-        gc = cfg['grid_columns']
         dlg = cfgDialog(self)
         res = dlg.exec_()
         if res == QDialog.Accepted:

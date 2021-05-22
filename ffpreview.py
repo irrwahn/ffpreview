@@ -671,6 +671,8 @@ class tmDialog(QDialog):
         hint = self.tree_widget.sizeHintForColumn(0)
         mwid = int(self.width() / 8 * 5)
         self.tree_widget.setColumnWidth(0, mwid if hint > mwid else hint)
+        for col in range(1, self.tree_widget.columnCount()):
+            self.tree_widget.resizeColumnToContents(col)
 
     def accept(self):
         for item in self.tree_widget.selectedItems():

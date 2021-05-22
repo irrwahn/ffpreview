@@ -668,6 +668,9 @@ class tmDialog(QDialog):
         QShortcut('Del', self).activated.connect(self.remove)
         QShortcut('F5', self).activated.connect(self.refresh_list)
         self.refresh_list()
+        hint = self.tree_widget.sizeHintForColumn(0)
+        mwid = int(self.width() / 8 * 5)
+        self.tree_widget.setColumnWidth(0, mwid if hint > mwid else hint)
 
     def accept(self):
         for item in self.tree_widget.selectedItems():
@@ -710,8 +713,6 @@ class tmDialog(QDialog):
                 item.setIcon(0, ffIcon.ok)
             item.vfile = entry['vfile']
             self.tree_widget.addTopLevelItem(item)
-        for col in range(ncols):
-            self.tree_widget.resizeColumnToContents(col)
         self.tot_label.setText('~ ' + hr_size(total_size, 0))
         self.selbroken_button.setEnabled(cnt_broken > 0)
         self.tree_widget.setUpdatesEnabled(True)

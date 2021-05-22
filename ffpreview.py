@@ -603,6 +603,7 @@ class tmDialog(QDialog):
         self.loc_label = QLabel(text='Index of ' + self.outdir + '/')
         self.tot_label = QLabel(text='--')
         self.tot_label.setAlignment(Qt.AlignRight)
+        self.tot_label.setToolTip('Approximate size of displayed items')
         self.hdr_layout.addWidget(self.loc_label)
         self.hdr_layout.addWidget(self.tot_label)
         self.tree_widget = QTreeWidget()
@@ -614,6 +615,15 @@ class tmDialog(QDialog):
         self.tree_widget.itemDoubleClicked.connect(self.accept)
         self.tree_widget.itemSelectionChanged.connect(self.sel_changed)
         self.tree_widget.setAlternatingRowColors(True)
+        self.filter_layout = QHBoxLayout()
+        self.filter_check = QCheckBox('Filter:')
+        self.filter_check.setTristate(False)
+        self.filter_check.setCheckState(Qt.Checked)
+        self.filter_check.stateChanged.connect(self.redraw_list)
+        self.filter_edit = QLineEdit()
+        self.filter_edit.textChanged.connect(self.redraw_list)
+        self.filter_layout.addWidget(self.filter_check, 1)
+        self.filter_layout.addWidget(self.filter_edit, 200)
         self.btn_layout = QHBoxLayout()
         self.load_button = QPushButton("Load Thumbnails")
         self.load_button.setIcon(ffIcon.open)
@@ -653,6 +663,7 @@ class tmDialog(QDialog):
         self.btn_layout.addWidget(self.close_button)
         self.dlg_layout.addLayout(self.hdr_layout)
         self.dlg_layout.addWidget(self.tree_widget)
+        self.dlg_layout.addLayout(self.filter_layout)
         self.dlg_layout.addLayout(self.btn_layout)
         QShortcut('Del', self).activated.connect(self.remove)
         QShortcut('F5', self).activated.connect(self.refresh_list)
@@ -667,12 +678,19 @@ class tmDialog(QDialog):
 
     def refresh_list(self):
         self.ilist = get_indexfiles(self.outdir)
+        self.redraw_list()
+        self.filter_edit.setFocus()
+
+    def redraw_list(self):
         self.tree_widget.setUpdatesEnabled(False)
         self.tree_widget.clear()
         ncols = self.tree_widget.columnCount()
         total_size = 0
         cnt_broken = 0
+        flt = self.filter_edit.text().strip().lower() if self.filter_check.isChecked() else None
         for entry in self.ilist:
+            if flt and not flt in entry['tdir'].lower():
+                continue
             total_size += entry['size']
             item = QTreeWidgetItem([entry['tdir'], str(entry['idx']['count']), hr_size(entry['size']),
                                     time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry['idx']['date']))])

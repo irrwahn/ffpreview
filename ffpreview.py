@@ -9,7 +9,7 @@ Ffpreview is distributed under the Modified ("3-clause") BSD License.
 See `LICENSE` file for more information.
 """
 
-_FFPREVIEW_VERSION = '0.2+'
+_FFPREVIEW_VERSION = '0.3'
 
 _FFPREVIEW_IDX = 'ffpreview.idx'
 

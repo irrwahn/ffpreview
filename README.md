@@ -3,6 +3,7 @@
 Ffpreview is a python script that acts as a front-end for ffmpeg to
 generate interactive thumbnail previews for video files.
 
+![ffpreview_1r](https://user-images.githubusercontent.com/21294666/119243320-dedc4280-bb65-11eb-8343-29104805447c.png)
 
 ## Requirements
 
@@ -20,8 +21,9 @@ Additionally, ffpreview will use `ffprobe` (if available) to perform the
 initial video file analysis, but will gracefully fall back to `ffmpeg`
 for that purpose too, should `ffprobe` fail.
 
-**NOTE: Ffpreview has only been tested to work on Linux.**
+Tested with Python 3.7.3, PyQt5 5.11.3.
 
+**Ffpreview has only been tested to work on Linux.**
 
 ## Configuration
 
@@ -79,12 +81,14 @@ window controls:
   Ctrl+G            adjust window geometry for optimal fit
   Ctrl+O            show open file dialog
   Ctrl+M            open thumbnail manager
+  Ctrl+Alt+P        open preferences dialog
+  Alt+H             open about dialog
   Double-click,
   Return, Space     open video at selected position in paused state
   Shift+dbl-click,
   Shift+Return      play video starting at selected position
   Mouse-2, Menu,
-  Alt+Return        open the context menu
+  Ctrl+Return       open the context menu
   Up, Down,
   PgUp, PgDown,
   Home, End,

@@ -3,17 +3,58 @@
 """
 ffpreview.py
 
-Copyright 2021 Urban Wallasch <irrwahn35@freenet.de>
+Copyright (c) 2021 Urban Wallasch <irrwahn35@freenet.de>
 
 Ffpreview is distributed under the Modified ("3-clause") BSD License.
 See `LICENSE` file for more information.
 """
 
-_FFPREVIEW_VERSION = '0.3'
+_FFPREVIEW_VERSION = '0.3+'
 
 _FFPREVIEW_IDX = 'ffpreview.idx'
 
 _FF_DEBUG = False
+
+_FFPREVIEW_HELP = """
+<style>
+  td {padding: 0.5em 0em 0em 0.5em;}
+  td.m {font-family: mono;}
+</style>
+<h3>Keyboard Shortcuts</h3>
+<table><tbody><tr>
+      <td class="m" width="30%">
+      Up, Down, PgUp, PgDown, Home, End, TAB, Shift+TAB</td>
+      <td>Navigate thumbnails</td>
+    </tr><tr>
+      <td class="m">Double-click, Return, Space</td>
+      <td>Open video at selected position in paused state</td>
+    </tr><tr>
+      <td class="m">Shift+dbl-click, Shift+Return</td>
+      <td>Play video starting at selected position</td>
+    </tr><tr>
+      <td class="m">Mouse-2, Menu, Alt+Return</td>
+      <td>Open the context menu</td>
+    </tr><tr>
+      <td class="m">ESC</td>
+      <td>Exit full screen view; quit application</td>
+    </tr><tr>
+      <td class="m">Ctrl+Q, Ctrl-W</td>
+      <td>Quit application</td>
+    </tr><tr>
+      <td class="m">Alt+Return, F</td>
+      <td>Toggle full screen view</td>
+    </tr><tr>
+      <td class="m">Ctrl+G</td>
+      <td>Adjust window geometry for optimal fit</td>
+    </tr><tr>
+      <td class="m">Ctrl+O</td>
+      <td>Show open file dialog</td>
+    </tr><tr>
+      <td class="m">Ctrl+M</td>
+      <td>Open thumbnail manager</td>
+    </tr>
+</tbody></table>
+"""
 
 import sys
 
@@ -197,12 +238,13 @@ class ffConfig:
                    '  Ctrl+O            show open file dialog\n'
                    '  Ctrl+M            open thumbnail manager\n'
                    '  Ctrl+Alt+P        open preferences dialog\n'
+                   '  Alt+H             open about dialog\n'
                    '  Double-click,\n'
                    '  Return, Space     open video at selected position in paused state\n'
                    '  Shift+dbl-click,\n'
                    '  Shift+Return      play video starting at selected position\n'
                    '  Mouse-2, Menu,\n'
-                   '  Alt+Return        open the context menu\n'
+                   '  Ctrl+Return       open the context menu\n'
                    '  Up, Down,\n'
                    '  PgUp, PgDown,\n'
                    '  Home, End,\n'
@@ -801,6 +843,40 @@ class tmDialog(QDialog):
         return self.loadfile
 
 
+class aboutDialog(QDialog):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setWindowTitle('Help & About')
+        self.setFixedSize(600, 600)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.icon_label = QLabel()
+        self.icon_label.setPixmap(ffIcon.ffpreview_pxm)
+        self.tag_label = QLabel('ffpreview %s\n'
+                                'Copyright (c) 2021, Urban Wallasch\n'
+                                'BSD 3-Clause License' % _FFPREVIEW_VERSION)
+        self.tag_label.setAlignment(Qt.AlignCenter)
+        self.hdr_layout = QHBoxLayout()
+        self.hdr_layout.addWidget(self.icon_label, 1)
+        self.hdr_layout.addWidget(self.tag_label, 100)
+        self.help_pane = QTextEdit()
+        self.help_pane.setReadOnly(True)
+        self.help_pane.setStyleSheet('QTextEdit {border: none;}')
+        self.help_pane.setHtml(_FFPREVIEW_HELP)
+        self.qt_button = QPushButton('About Qt')
+        self.qt_button.clicked.connect(lambda: QMessageBox.aboutQt(self))
+        self.close_button = QPushButton('Close')
+        self.close_button.setIcon(ffIcon.close)
+        self.close_button.clicked.connect(self.accept)
+        self.btn_layout = QHBoxLayout()
+        self.btn_layout.addWidget(self.qt_button)
+        self.btn_layout.addStretch()
+        self.btn_layout.addWidget(self.close_button)
+        self.dlg_layout = QVBoxLayout(self)
+        self.dlg_layout.addLayout(self.hdr_layout)
+        self.dlg_layout.addWidget(self.help_pane)
+        self.dlg_layout.addLayout(self.btn_layout)
+
+
 class cfgDialog(QDialog):
     ilist = []
     outdir = ''
@@ -1210,6 +1286,8 @@ class sMainWindow(QMainWindow):
         else:
             menu.addAction('Abort Operation', self.abort_build)
         menu.addSeparator()
+        menu.addAction('Help && About', self.about_dlg)
+        menu.addSeparator()
         menu.addAction('Quit', lambda: self.closeEvent(None))
         menu.exec_(pos)
 
@@ -1230,6 +1308,10 @@ class sMainWindow(QMainWindow):
         res = dlg.exec_()
         if res == QDialog.Accepted:
             self.load_view(self.fname)
+
+    def about_dlg(self):
+        dlg = aboutDialog(self)
+        res = dlg.exec_()
 
     def _play_video(self, ts=None, paused=False):
         if self.view_locked:
@@ -1320,7 +1402,8 @@ class sMainWindow(QMainWindow):
         QShortcut('Return', self).activated.connect(lambda: self._play_video(paused=True))
         QShortcut('Shift+Return', self).activated.connect(lambda: self._play_video())
         QShortcut('Ctrl+Return', self).activated.connect(lambda: self.contextMenuEvent(None))
-        QShortcut('Ctrl+Alt+P', self).activated.connect(lambda: self.config_dlg())
+        QShortcut('Ctrl+Alt+P', self).activated.connect(self.config_dlg)
+        QShortcut('Alt+H', self).activated.connect(self.about_dlg)
 
 
     def show_progress(self, n, tot):

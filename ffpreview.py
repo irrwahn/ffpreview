@@ -589,6 +589,34 @@ class tScrollArea(QScrollArea):
         slave.setUpdatesEnabled(True)
 
 
+class tmQTreeWidget(QTreeWidget):
+    def __init__(self, *args, load_action=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.load_action = load_action
+
+    def contextMenuEvent(self, event):
+        menu = QMenu()
+        if self.load_action and len(self.selectedItems()) == 1:
+            menu.addAction('Load Thumbnails', self.load_action)
+            menu.addSeparator()
+        menu.addAction('Select All', self.select_all)
+        menu.addAction('Select None', self.select_none)
+        menu.addAction('Invert Selection', self.invert_selection)
+        menu.exec_(self.mapToGlobal(event.pos()))
+
+    def select_all(self, sel=True):
+        for i in range(self.topLevelItemCount()):
+            self.topLevelItem(i).setSelected(sel)
+
+    def select_none(self):
+        self.select_all(False)
+
+    def invert_selection(self):
+        sel = self.selectedItems()
+        self.select_all()
+        for i in sel:
+            i.setSelected(False)
+
 class tmDialog(QDialog):
     ilist = []
     outdir = ''
@@ -606,7 +634,7 @@ class tmDialog(QDialog):
         self.tot_label.setToolTip('Approximate size of displayed items')
         self.hdr_layout.addWidget(self.loc_label)
         self.hdr_layout.addWidget(self.tot_label)
-        self.tree_widget = QTreeWidget()
+        self.tree_widget = tmQTreeWidget(load_action=self.accept)
         self.tree_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.tree_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.tree_widget.setRootIsDecorated(False)
@@ -619,8 +647,10 @@ class tmDialog(QDialog):
         self.filter_check = QCheckBox('Filter:')
         self.filter_check.setTristate(False)
         self.filter_check.setCheckState(Qt.Checked)
+        self.filter_check.setToolTip('Activate or deactivate filter')
         self.filter_check.stateChanged.connect(self.redraw_list)
         self.filter_edit = QLineEdit()
+        self.filter_edit.setToolTip('Filter list by text contained in name')
         self.filter_edit.textChanged.connect(self.redraw_list)
         self.filter_layout.addWidget(self.filter_check, 1)
         self.filter_layout.addWidget(self.filter_edit, 200)
@@ -638,7 +668,7 @@ class tmDialog(QDialog):
         self.invert_button = QPushButton("Invert Selection")
         self.invert_button.setIcon(ffIcon.revert)
         self.invert_button.setToolTip('Invert the current selection')
-        self.invert_button.clicked.connect(self.invert_selection)
+        self.invert_button.clicked.connect(self.tree_widget.invert_selection)
         self.selbroken_button = QPushButton("Select Broken")
         self.selbroken_button.setIcon(ffIcon.remove)
         self.selbroken_button.setToolTip('Select orphaned or otherwise corrupted thumbnail directories')
@@ -670,7 +700,7 @@ class tmDialog(QDialog):
         self.refresh_list()
         hint = self.tree_widget.sizeHintForColumn(0)
         mwid = int(self.width() / 8 * 5)
-        self.tree_widget.setColumnWidth(0, mwid if hint > mwid else hint)
+        self.tree_widget.setColumnWidth(0, min(mwid, hint))
         for col in range(1, self.tree_widget.columnCount()):
             self.tree_widget.resizeColumnToContents(col)
 
@@ -679,7 +709,12 @@ class tmDialog(QDialog):
             if item.vfile:
                 self.loadfile = item.vfile
                 eprint(1, "load file ", item.vfile)
+                self.deleteLater()
                 super().accept()
+
+    def reject(self):
+        self.deleteLater()
+        super().reject()
 
     def refresh_list(self):
         self.ilist = get_indexfiles(self.outdir)
@@ -687,6 +722,7 @@ class tmDialog(QDialog):
         self.filter_edit.setFocus()
 
     def redraw_list(self):
+        selected = [item.text(0) for item in self.tree_widget.selectedItems()]
         self.tree_widget.setUpdatesEnabled(False)
         self.tree_widget.clear()
         ncols = self.tree_widget.columnCount()
@@ -715,6 +751,9 @@ class tmDialog(QDialog):
                 item.setIcon(0, ffIcon.ok)
             item.vfile = entry['vfile']
             self.tree_widget.addTopLevelItem(item)
+            if entry['tdir'] in selected:
+                item.setSelected(True)
+                selected.remove(entry['tdir'])
         self.tot_label.setText('~ ' + hr_size(total_size, 0))
         self.selbroken_button.setEnabled(cnt_broken > 0)
         self.tree_widget.setUpdatesEnabled(True)
@@ -729,13 +768,6 @@ class tmDialog(QDialog):
         nsel = len(sel)
         self.remove_button.setEnabled(nsel > 0)
         self.load_button.setEnabled(True if nsel==1 and sel[0].vfile else False)
-
-    def invert_selection(self):
-        sel = self.tree_widget.selectedItems()
-        for i in range(self.tree_widget.topLevelItemCount()):
-            self.tree_widget.topLevelItem(i).setSelected(True)
-        for i in sel:
-            i.setSelected(False)
 
     def remove(self):
         dirs = [sel.text(0) for sel in self.tree_widget.selectedItems()]

@@ -1157,10 +1157,8 @@ class cfgDialog(QDialog):
 class sMainWindow(QMainWindow):
     """ Application main window class singleton. """
     _instance = None
-    px = 50
-    py = 50
-    tlwidth = 0
-    tlheight = 0
+    tlwidth = 100
+    tlheight = 100
     tlabels = []
     thinfo = None
     fname = None
@@ -1187,11 +1185,76 @@ class sMainWindow(QMainWindow):
             event.accept()
         die(0)
 
-    def optimize_extent(self):
-        if self.tlwidth > 0 and self.tlheight > 0:
-            w = self.tlwidth * cfg['grid_columns'] + self.px
-            h = self.tlheight * cfg['grid_rows'] + self.py
-            self.resize(w, h)
+    # calculate optimal window geometry in ten easy steps
+    def optimize_geometry(self):
+        if self.windowState() & (Qt.WindowFullScreen | Qt.WindowMaximized):
+            return
+        # get current window geometry (excluding WM decorations)
+        wg = self.geometry()
+        wx = max(wg.x(), 0)
+        wy = max(wg.y(), 0)
+        ww = wg.width()
+        wh = wg.height()
+        # get frame geometry (including WM dewcorations)
+        fg = self.frameGeometry()
+        fx = fg.x()
+        fy = fg.y()
+        fw = fg.width()
+        fh = fg.height()
+        eprint(3, 'w', wx, wy, ww, wh, 'f', fx, fy, fw, fh)
+        # calculate overhead WRT to thumbnail viewport
+        scpol = self.scroll.verticalScrollBarPolicy()
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        ow = ww - self.scroll.viewport().width()
+        oh = wh - self.scroll.viewport().height()
+        self.scroll.setVerticalScrollBarPolicy(scpol)
+        # grid granularity (i.e. thumbnail label dimension)
+        gw = self.tlwidth
+        gh = self.tlheight
+        # set minimum window size (i.e. flip-book sized)
+        minw = gw + ow
+        minh = gh + oh
+        self.setMinimumSize(minw, minh)
+        eprint(3, 'o', ow, oh, 'g', gw, gh)
+        # get current available(!) screen geometry
+        screens = QGuiApplication.screens()
+        for sc in reversed(screens):
+            scg = sc.availableGeometry()
+            sx = scg.x()
+            sy = scg.y()
+            sw = scg.width()
+            sh = scg.height()
+            if wx >= sx and wy >= sy and wx < sx+sw and wy < sy+sh:
+                break
+        eprint(3, 's', sx, sy, sw, sh)
+        # tentative (wanted) window geometry
+        tx = max(wx, sx)
+        ty = max(wy, sy)
+        tw = gw * cfg['grid_columns'] + ow
+        th = gh * cfg['grid_rows'] + oh
+        # available remaining screen estate (right and below)
+        aw = sw - (tx - sx)
+        ah = sh - (ty - sy)
+        eprint(3, 't', tx, ty, tw, th, 'a', aw, ah)
+        # try to fit the window on screen, move or resize if necessary
+        if tw > aw - (fw - ww):
+            frame_left = (fx + fw) - (wx +ww)
+            tx = tx - (tw - aw) - frame_left
+            tx = max(tx, sx)
+            aw = sw - (tx - sx)
+            tw = max(minw, min(tw, aw))
+        if th > ah - (fh - wh):
+            frame_bottom = (fy + fh) - (wy + wh)
+            ty = ty - (th - ah) - frame_bottom
+            ty = max(ty, sy)
+            ah = sh - (ty - sy)
+            th = max(minh, min(th, ah))
+        # round down window dimensions to thumb grid
+        tw = int((tw - ow) / gw) * gw + ow
+        th = int((th - oh) / gh) * gh + oh
+        eprint(3, 't', tx, ty, tw, th)
+        # set final size
+        self.setGeometry(tx, ty, tw, th)
 
     def rebuild_view(self):
         self.scroll.fill_grid(self.tlabels, self.show_progress)
@@ -1288,7 +1351,8 @@ class sMainWindow(QMainWindow):
                     copymenu.addAction('Thumb Filename', lambda: self.clipboard.setText(os.path.join(self.thdir, tlabel.info[1])))
                     copymenu.addAction('Thumbnail Image', lambda: self.clipboard.setPixmap(tlabel.layout().itemAt(0).widget().pixmap()))
             menu.addSeparator()
-            menu.addAction('Optimize Window Extent', self.optimize_extent)
+            if not (self.windowState() & (Qt.WindowFullScreen | Qt.WindowMaximized)):
+                menu.addAction('Window Best Fit', self.optimize_geometry)
             menu.addAction('Thumbnail Manager', lambda: self.manage_thumbs(cfg['outdir']))
             menu.addAction('Preferences', lambda: self.config_dlg())
         else:
@@ -1393,7 +1457,7 @@ class sMainWindow(QMainWindow):
         QShortcut('Ctrl+W', self).activated.connect(lambda: self.closeEvent(None))
         QShortcut('F', self).activated.connect(self.toggle_fullscreen)
         QShortcut('Alt+Return', self).activated.connect(self.toggle_fullscreen)
-        QShortcut('Ctrl+G', self).activated.connect(self.optimize_extent)
+        QShortcut('Ctrl+G', self).activated.connect(self.optimize_geometry)
         QShortcut('Ctrl+O', self).activated.connect(lambda: self.load_view(self.vpath))
         QShortcut('Ctrl+M', self).activated.connect(lambda: self.manage_thumbs(cfg['outdir']))
         QShortcut('Tab', self).activated.connect(lambda: self.move_cursor(1))
@@ -1526,12 +1590,8 @@ class sMainWindow(QMainWindow):
         self.statdsp[0].setText('Loading')
         self.progbar.show()
         self.make_tlabels(self.tlabels)
-        # roughly fix window geometry
         self.tlwidth = self.tlabels[0].width()
         self.tlheight = self.tlabels[0].height()
-        w = self.tlwidth * cfg['grid_columns'] + self.px
-        h = self.tlheight * cfg['grid_rows'] + self.py
-        self.resize(w, h)
         # build thumbnail view
         tooltip = ppdict(self.thinfo, ['th'])
         for sd in self.statdsp:
@@ -1546,13 +1606,8 @@ class sMainWindow(QMainWindow):
         # final window touch-up
         self.statdsp[0].setText(s2hms(self.thinfo['duration']))
         self.statdsp[1].setText(str(self.thinfo['method']))
+        self.optimize_geometry()
         QApplication.processEvents()
-        # calculate the actual window extent surplus WRT to viewport
-        self.px = self.width() - self.scroll.viewport().width()
-        self.py = self.height() - self.scroll.viewport().height()
-        # set window size
-        self.setMinimumSize(self.tlwidth + self.px, self.tlheight + self.py)
-        self.optimize_extent()
         self.set_view_locked(False)
         # reset force flag to avoid accidental rebuild for every file
         cfg['force'] = False

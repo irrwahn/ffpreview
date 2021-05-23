@@ -1266,13 +1266,15 @@ class sMainWindow(QMainWindow):
         if self.tlabels:
             self.tlabels.clear()
 
-    def set_cursor(self, idx=None):
+    def set_cursor(self, idx=None, disable=False):
         l = len(self.tlabels)
         if l < 1:
             self.cur = 0
             return
         try:
             self.tlabels[self.cur].setStyleSheet('')
+            if disable:
+                return
             bg_hl = self.palette().highlight().color().name()
             fg_hl = self.palette().highlightedText().color().name()
             style_hl = 'QLabel {background-color: %s; color: %s;}' % (bg_hl, fg_hl)
@@ -1539,6 +1541,7 @@ class sMainWindow(QMainWindow):
     def set_view_locked(self, lock=True):
         self.view_locked = lock
         self.scroll.setEnabled(not lock)
+        self.set_cursor(disable=lock)
 
     def load_view(self, fname):
         if self.view_locked:

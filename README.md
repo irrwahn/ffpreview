@@ -32,6 +32,28 @@ below), plus the incantations to start external programs, can be specified
 in the configuration file. For more detailed information please refer to
 the `ffpreview.conf.sample` example configuration file.
 
+## Video filters
+
+The thumbnail sampling method presets available in `ffpreview` translate
+to `ffmpeg` filters as follows:
+
+`iframe` (_--iframe_, key frame detection):
+>   `-vf select=eq(pict_type,I), ...`
+
+`scene` (_--scene_, automatic scene change detection):
+>   `-vf select=gt(scene,SCENE_THRESHOLD), ...`
+
+`skip` (_--nskip_, skip number of frames):
+>   `-vf select=not(mod(n,NUM_FRAMES)), ...`
+
+`time` (_--nsecs_, skip number of seconds):
+>   `-vf select=not(mod(n,NUM_SECONDS*FPS)), ...`
+
+`customvf` (_--customvf_, custom video filter):
+>   `-vf select=YOUR_CUSTOM_FILTER, ...`
+
+Please consult the `ffmpeg` documentation to learn more about video filter
+expressions.
 
 ## Usage
 
@@ -130,6 +152,7 @@ $ ./ffpreview.py -m
 $ ./ffpreview.py -b movie1.mkv movie2.mp4 another.mpg
 $ ./ffpreview.py -b /some/directory/*
 ```
+**Note:** `ffpreview` does _not_ recursively traverse subdirectories.
 
 ## License
 

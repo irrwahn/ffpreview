@@ -1215,7 +1215,7 @@ class sMainWindow(QMainWindow):
         minw = gw + ow
         minh = gh + oh
         self.setMinimumSize(minw, minh)
-        eprint(3, 'o', ow, oh, 'g', gw, gh)
+        eprint(3, 'o', ow, oh, 'g', gw, gh, 'c,r', cfg['grid_columns'], cfg['grid_rows'])
         # get current available(!) screen geometry
         screens = QGuiApplication.screens()
         for sc in reversed(screens):
@@ -1407,7 +1407,8 @@ class sMainWindow(QMainWindow):
         elif event['type'] == 'rebuild_view':
             self.rebuild_view()
         elif event['type'] == 'scroll_do_update':
-            self.scroll.do_update(self.tlwidth, self.tlheight)
+            if not self.view_locked:
+                self.scroll.do_update(self.tlwidth, self.tlheight)
         elif event['type'] == 'play_video':
             self._play_video(ts=event['ts'], paused=event['pause'])
         elif event['type'] == '_dbg_count':

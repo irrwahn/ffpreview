@@ -876,6 +876,14 @@ class aboutDialog(QDialog):
         self.dlg_layout.addWidget(self.help_pane)
         self.dlg_layout.addLayout(self.btn_layout)
 
+    def accept(self):
+        self.deleteLater()
+        super().accept()
+
+    def reject(self):
+        self.deleteLater()
+        super().reject()
+
 
 class cfgDialog(QDialog):
     ilist = []

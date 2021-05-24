@@ -199,6 +199,7 @@ class ffConfig:
         'customvf': 'scdet=s=1:t=12',
         'start': '0',
         'end': '0',
+        'addss': -1,
         'verbosity': 0,
         'batch': 0,
         'manage': 0,
@@ -266,6 +267,7 @@ class ffConfig:
         parser.add_argument('-C', '--customvf', metavar='S', help='select frames using custom filter string S')
         parser.add_argument('-S', '--start', metavar='T', help='start video analysis at time T')
         parser.add_argument('-E', '--end', metavar='T', help='end video analysis at time T')
+        parser.add_argument('-a', '--addss', nargs='?', type=int, const=0, metavar='N', help='add subtitles from stream N')
         parser.add_argument('-v', '--verbose', action='count', help='be more verbose; repeat to increase')
         parser.add_argument('--version', action='count', help='print version info and exit')
         args = parser.parse_args()
@@ -298,6 +300,8 @@ class ffConfig:
             cfg['start'] = hms2s(args.start)
         if args.end:
             cfg['end'] = hms2s(args.end)
+        if args.addss is not None:
+            cfg['addss'] = args.addss
         if args.grid:
             grid = re.split(r'[xX,;:]', args.grid)
             cfg['grid_columns'] = int(grid[0])
@@ -360,6 +364,7 @@ class ffConfig:
         cfg['scene_thresh'] = str2float(cfg['scene_thresh'])
         cfg['start'] = str2float(cfg['start'])
         cfg['end'] = str2float(cfg['end'])
+        cfg['addss'] = str2int(cfg['addss'])
         return True
 
     @classmethod
@@ -906,7 +911,9 @@ class cfgDialog(QDialog):
             ['frame_skip', 'spin', 'Number of frames to skip for method \'skip\''],
             ['time_skip', 'spin', 'Number of seconds to skip for method \'time\''],
             ['scene_thresh', 'dblspin', 'Scene detection threshold for method \'scene\''],
-            ['customvf', 'edit', 'Filter expression for method \'customvf\''] ]
+            ['customvf', 'edit', 'Filter expression for method \'customvf\''],
+            ['addss', 'spin', 'Add subtitles from stream'],
+        ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -921,7 +928,7 @@ class cfgDialog(QDialog):
         self.table_widget.setStyleSheet('QTableView::item {border-bottom: 1px solid lightgrey;}')
         self.table_widget.setRowCount(len(self.opt))
         self.table_widget.setColumnCount(1)
-        self.resize(self.table_widget.width() + 150, self.table_widget.height()+100)
+        self.resize(self.table_widget.width() + 150, self.table_widget.height()+120)
         self.btn_layout = QHBoxLayout()
         self.reset_button = QPushButton('Reset')
         self.reset_button.setIcon(ffIcon.revert)
@@ -1116,7 +1123,7 @@ class cfgDialog(QDialog):
                 w.textChanged.connect(self.changed)
             elif o[1] == 'spin':
                 w = QSpinBox()
-                w.setRange(1, 9999)
+                w.setRange(0, 9999)
                 w.setValue(self.cfg[o[0]])
                 w.setToolTip(o[2])
                 w.valueChanged.connect(self.changed)
@@ -1689,12 +1696,47 @@ def get_meta(vidfile):
         proc = kill_proc(proc)
     return meta, False
 
+# count subtitle streams
+def count_subss(vidfile):
+    global proc
+    if proc:
+        return -1
+    nstreams = -1
+    try:
+        cmd = cfg['ffprobe'] + ' -v error -select_streams s -show_entries stream=index -of csv=p=0'
+        cmd += ' "' + vidfile + '"'
+        eprint(2, cmd)
+        proc = Popen(cfg['exec'] + ' ' + cmd, shell=True, stdout=PIPE, stderr=PIPE, env=cfg['env'])
+        stdout, stderr = proc.communicate()
+        retval = proc.wait()
+        proc = None
+        if retval == 0:
+            nstreams = len(stdout.decode().splitlines())
+            eprint(2, 'number of subtitle streams:', nstreams)
+        else:
+            eprint(0, cmd + '\n  returned %d' % retval)
+            eprint(1, stderr.decode())
+    except Exception as e:
+        eprint(0, cmd + '\n  failed: ' + str(e))
+        proc = kill_proc(proc)
+    return nstreams
+
 # extract thumbnails from video and collect timestamps
 def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     global proc
     rc = False
     if proc:
         return thinfo, rc
+    # check for subtitle streams
+    addss = cfg['addss']
+    if addss >= 0:
+        nstreams = count_subss(vidfile)
+        if addss > nstreams - 1:
+            eprint(1, 'ignoring invalid subtitle stream index:', addss)
+            addss = -1
+        else:
+            eprint(2, 'including subtitle stream index:', addss)
+    # generate thumbnail images from video
     pictemplate = '%08d.png'
     cmd = cfg['ffmpeg'] + ' -loglevel info -hide_banner -y'
     if cfg['start']:
@@ -1713,8 +1755,10 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
         cmd += ' -vf "' + cfg['customvf']
     else: # iframe
         cmd += ' -vf "select=eq(pict_type\,I)'
-    cmd += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1"'
-    cmd += ' -vsync vfr "' + os.path.join(thdir, pictemplate) + '"'
+    cmd += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1'
+    if addss >= 0:
+        cmd += ',subtitles=\'' + vidfile + '\':si=' + str(addss)
+    cmd += '" -vsync vfr "' + os.path.join(thdir, pictemplate) + '"'
     eprint(2, cmd)
     ebuf = ''
     cnt = 0

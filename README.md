@@ -59,36 +59,37 @@ to learn more about video frame select filter expressions.
 ## Usage
 
 Running `ffpreview.py -h` will print the following help text:
-
 ```
 usage: ffpreview.py [-h] [-b] [-m] [-c F] [-g G] [-w N] [-o P] [-f] [-r] [-i]
-                    [-n N] [-N F] [-s F] [-C S] [-S T] [-E T] [-v] [--version]
+                    [-n N] [-N F] [-s F] [-C S] [-S T] [-E T] [-a [N]] [-v]
+                    [--version]
                     [filename [filename ...]]
 
 Generate interactive video thumbnail preview.
 
 positional arguments:
-  filename            input video file
+  filename             input video file
 
 optional arguments:
-  -h, --help          show this help message and exit
-  -b, --batch         batch mode, do not draw window
-  -m, --manage        start with thumbnail manager
-  -c F, --config F    read configuration from file F
-  -g G, --grid G      set grid geometry in COLS[xROWS] format
-  -w N, --width N     thumbnail image width in pixel
-  -o P, --outdir P    set thumbnail parent directory to P
-  -f, --force         force thumbnail and index rebuild
-  -r, --reuse         reuse filter settings from index file
-  -i, --iframe        select only I-frames (default)
-  -n N, --nskip N     select only every Nth frame
-  -N F, --nsecs F     select one frame every F seconds
-  -s F, --scene F     select by scene change threshold; 0 < F < 1
-  -C S, --customvf S  select frames using custom filter string S
-  -S T, --start T     start video analysis at time T
-  -E T, --end T       end video analysis at time T
-  -v, --verbose       be more verbose; repeat to increase
-  --version           print version info and exit
+  -h, --help           show this help message and exit
+  -b, --batch          batch mode, do not draw window
+  -m, --manage         start with thumbnail manager
+  -c F, --config F     read configuration from file F
+  -g G, --grid G       set grid geometry in COLS[xROWS] format
+  -w N, --width N      thumbnail image width in pixel
+  -o P, --outdir P     set thumbnail parent directory to P
+  -f, --force          force thumbnail and index rebuild
+  -r, --reuse          reuse filter settings from index file
+  -i, --iframe         select only I-frames (default)
+  -n N, --nskip N      select only every Nth frame
+  -N F, --nsecs F      select one frame every F seconds
+  -s F, --scene F      select by scene change threshold; 0 < F < 1
+  -C S, --customvf S   select frames using custom filter string S
+  -S T, --start T      start video analysis at time T
+  -E T, --end T        end video analysis at time T
+  -a [N], --addss [N]  add subtitles from stream N
+  -v, --verbose        be more verbose; repeat to increase
+  --version            print version info and exit
 
   The -C, -i, -N, -n and -s options are mutually exclusive. If more
   than one is supplied: -C beats -i beats -N beats -n beats -s.

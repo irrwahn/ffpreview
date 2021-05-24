@@ -50,10 +50,11 @@ to `ffmpeg` filters as follows:
 >   `-vf select=not(mod(n,NUM_SECONDS*FPS)), ...`
 
 `customvf` (_--customvf_, custom video filter):
->   `-vf select=YOUR_CUSTOM_FILTER, ...`
+>   `-vf YOUR_CUSTOM_FILTER, ...`
 
-Please consult the `ffmpeg` documentation to learn more about video filter
-expressions.
+Please consult the official `ffmpeg`
+[documentation](https://ffmpeg.org/ffmpeg-filters.html#select_002c-aselect)
+to learn more about video frame select filter expressions.
 
 ## Usage
 

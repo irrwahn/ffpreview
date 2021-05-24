@@ -895,24 +895,24 @@ class cfgDialog(QDialog):
     ilist = []
     outdir = ''
     loadfile = ''
-    opt = [ ['outdir', 'sdir', 'Thumbnail storage directory'],
-            ['ffprobe', 'sfile', 'Command to start ffprobe'],
-            ['ffmpeg', 'sfile', 'Command to start ffmpeg'],
-            ['player', 'sfile', 'Command to open video player'],
-            ['plpaused', 'sfile', 'Command to open player in paused mode'],
-            ['grid_columns', 'spin', 'Number of columns in thumbnail view'],
-            ['grid_rows', 'spin', 'Number of rows in thumbnail view'],
-            ['force', 'check', 'Forcibly rebuild preview when opening a file (reset after each view load)'],
-            ['reuse', 'check', 'If possible, reuse existing thumbnail parameters when viewing'],
-            ['thumb_width', 'spin', 'Width in pixel for thumbnail creation'],
-            ['start', 'time', 'Start time for thumbnail creation'],
-            ['end', 'time', 'End time for thumbnail creation'],
-            ['method', 'mcombo', 'Select video filter method for thumbnail creation'],
-            ['frame_skip', 'spin', 'Number of frames to skip for method \'skip\''],
-            ['time_skip', 'spin', 'Number of seconds to skip for method \'time\''],
-            ['scene_thresh', 'dblspin', 'Scene detection threshold for method \'scene\''],
-            ['customvf', 'edit', 'Filter expression for method \'customvf\''],
-            ['addss', 'spin', 'Add subtitles from stream'],
+    opt = [ ['outdir', ('sfile', True, 0), 'Thumbnail storage directory'],
+            ['ffprobe', ('sfile', False, 0), 'Command to start ffprobe'],
+            ['ffmpeg', ('sfile', False, 0), 'Command to start ffmpeg'],
+            ['player', ('sfile', False, 0), 'Command to open video player'],
+            ['plpaused', ('sfile', False, 0), 'Command to open player in paused mode'],
+            ['grid_columns', ('spin', 1, 999), 'Number of columns in thumbnail view'],
+            ['grid_rows', ('spin', 1, 999), 'Number of rows in thumbnail view'],
+            ['force', ('check', 0, 0), 'Forcibly rebuild preview when opening a file (reset after each view load)'],
+            ['reuse', ('check', 0, 0), 'If possible, reuse existing thumbnail parameters when viewing'],
+            ['thumb_width', ('spin', 1, 9999), 'Width in pixel for thumbnail creation'],
+            ['start', ('time', 0, 0), 'Start time for thumbnail creation'],
+            ['end', ('time', 0, 0), 'End time for thumbnail creation'],
+            ['method', ('mcombo', 0, 0), 'Select video filter method for thumbnail creation'],
+            ['frame_skip', ('spin', 1, 99999), 'Number of frames to skip for method \'skip\''],
+            ['time_skip', ('spin', 1, 9999), 'Number of seconds to skip for method \'time\''],
+            ['scene_thresh', ('dblspin', 0.0, 1.0), 'Scene detection threshold for method \'scene\''],
+            ['customvf', ('edit', 199, 0), 'Filter expression for method \'customvf\''],
+            ['addss', ('spin', -1, 99), 'Add subtitles from stream'],
         ]
 
     def __init__(self, *args, **kwargs):
@@ -1046,18 +1046,18 @@ class cfgDialog(QDialog):
         for i in range(len(self.opt)):
             o = self.opt[i]
             w = self.table_widget.cellWidget(i, 0)
-            if o[1] == 'sdir' or o[1] == 'sfile':
+            if o[1][0] == 'sfile':
                 self.cfg[o[0]] = w.children()[1].text()
-            elif o[1] == 'edit':
+            elif o[1][0] == 'edit':
                 self.cfg[o[0]] = w.text()
-            elif o[1] == 'spin' or o[1] == 'dblspin':
+            elif o[1][0] == 'spin' or o[1][0] == 'dblspin':
                 self.cfg[o[0]] = w.value()
-            elif o[1] == 'check':
+            elif o[1][0] == 'check':
                 self.cfg[o[0]] = w.isChecked()
-            elif o[1] == 'time':
+            elif o[1][0] == 'time':
                 t = w.children()[1].time()
                 self.cfg[o[0]] = t.hour()*3600 + t.minute()*60 + t.second() + t.msec()/1000
-            elif o[1] == 'mcombo':
+            elif o[1][0] == 'mcombo':
                 self.cfg[o[0]] = w.currentText()
             eprint(3, 'apply:', o[0], '=', self.cfg[o[0]])
         self.cfg['outdir'] = make_outdir(self.cfg['outdir'])
@@ -1111,37 +1111,35 @@ class cfgDialog(QDialog):
             eprint(3, 'refresh:', o[0], '=', self.cfg[o[0]])
             self.table_widget.setVerticalHeaderItem(i, QTableWidgetItem(o[0]))
             self.table_widget.verticalHeaderItem(i).setToolTip(o[2])
-            if o[1] == 'sdir':
-                w = self._fs_browse(self.cfg[o[0]], dironly=True)
+            if o[1][0] == 'sfile':
+                w = self._fs_browse(self.cfg[o[0]], dironly=o[1][1])
                 w.setToolTip(o[2])
-            elif o[1] == 'sfile':
-                w = self._fs_browse(self.cfg[o[0]])
-                w.setToolTip(o[2])
-            elif o[1] == 'edit':
+            elif o[1][0] == 'edit':
                 w = QLineEdit(self.cfg[o[0]])
+                w.setMaxLength(o[1][1])
                 w.setToolTip(o[2])
                 w.textChanged.connect(self.changed)
-            elif o[1] == 'spin':
+            elif o[1][0] == 'spin':
                 w = QSpinBox()
-                w.setRange(0, 9999)
+                w.setRange(o[1][1], o[1][2])
                 w.setValue(self.cfg[o[0]])
                 w.setToolTip(o[2])
                 w.valueChanged.connect(self.changed)
-            elif o[1] == 'dblspin':
+            elif o[1][0] == 'dblspin':
                 w = QDoubleSpinBox()
-                w.setRange(0.0, 1.0)
+                w.setRange(o[1][1], o[1][2])
                 w.setSingleStep(0.05)
                 w.setDecimals(2)
                 w.setValue(self.cfg[o[0]])
                 w.setToolTip(o[2])
                 w.valueChanged.connect(self.changed)
-            elif o[1] == 'check':
+            elif o[1][0] == 'check':
                 w = QCheckBox('                          ')
                 w.setTristate(False)
                 w.setCheckState(2 if self.cfg[o[0]] else 0)
                 w.setToolTip(o[2])
                 w.stateChanged.connect(self.changed)
-            elif o[1] == 'time':
+            elif o[1][0] == 'time':
                 rs = self.cfg[o[0]]
                 s = round(rs, 0)
                 ms = (rs - s) * 1000
@@ -1151,7 +1149,7 @@ class cfgDialog(QDialog):
                 s = s % 60
                 w = self._time_edit(h, m, s, ms)
                 w.setToolTip(o[2])
-            elif o[1] == 'mcombo':
+            elif o[1][0] == 'mcombo':
                 w = QComboBox()
                 w.addItems(['iframe', 'scene', 'skip', 'time', 'customvf'])
                 w.setCurrentIndex(w.findText(self.cfg[o[0]]))

@@ -1642,9 +1642,10 @@ class sMainWindow(QMainWindow):
 # get video meta information
 def get_meta(vidfile):
     global proc
-    meta = { 'frames': -1, 'duration':-1, 'fps':-1.0 }
+    meta = { 'frames': -1, 'duration':-1, 'fps':-1.0, 'nsubs': -1 }
     if proc:
         return meta, False
+    meta['nsubs'] = count_subss(vidfile)
     # try ffprobe method
     try:
         cmd = cfg['ffprobe'] + ' -v error -select_streams v:0 -of json -count_packets'
@@ -1725,15 +1726,6 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     rc = False
     if proc:
         return thinfo, rc
-    # check for subtitle streams
-    addss = cfg['addss']
-    if addss >= 0:
-        nstreams = count_subss(vidfile)
-        if addss > nstreams - 1:
-            eprint(1, 'ignoring invalid subtitle stream index:', addss)
-            addss = -1
-        else:
-            eprint(2, 'including subtitle stream index:', addss)
     # generate thumbnail images from video
     pictemplate = '%08d.png'
     cmd = cfg['ffmpeg'] + ' -loglevel info -hide_banner -y'
@@ -1754,8 +1746,8 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     else: # iframe
         cmd += ' -vf "select=eq(pict_type\,I)'
     cmd += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1'
-    if addss >= 0:
-        cmd += ',subtitles=\'' + vidfile + '\':si=' + str(addss)
+    if thinfo['addss'] >= 0:
+        cmd += ',subtitles=\'' + vidfile + '\':si=' + str(thinfo['addss'])
     cmd += '" -vsync vfr "' + os.path.join(thdir, pictemplate) + '"'
     eprint(2, cmd)
     ebuf = ''
@@ -1887,6 +1879,10 @@ def chk_idxfile(thinfo, thdir):
             if not cfg['reuse']:
                 if idx['width'] != thinfo['width']:
                     return False
+                if idx['nsubs'] != thinfo['nsubs']:
+                    return False
+                if idx['addss'] != thinfo['addss']:
+                    return False
                 if idx['method'] != thinfo['method']:
                     return False
                 if idx['method'] == 'skip':
@@ -1915,6 +1911,7 @@ def get_thinfo(vfile, thdir):
         'frames': -1,
         'duration': -1,
         'fps': -1,
+        'nsubs': -1,
         'start': cfg['start'],
         'end': cfg['end'],
         'count': 0,
@@ -1931,6 +1928,7 @@ def get_thinfo(vfile, thdir):
     elif cfg['method'] == 'customvf':
         thinfo['customvf'] = cfg['customvf']
     # set these here for neater ordering
+    thinfo['addss'] = cfg['addss']
     thinfo['ffpreview'] = _FFPREVIEW_VERSION
     thinfo['date'] = 0
     thinfo['th'] = []
@@ -1939,6 +1937,8 @@ def get_thinfo(vfile, thdir):
     if not ok:
         return None, False
     thinfo.update(meta)
+    if thinfo['addss'] >= thinfo['nsubs']:
+        thinfo['addss'] = -1
     if not cfg['force']:
         chk = chk_idxfile(thinfo, thdir)
         if chk:

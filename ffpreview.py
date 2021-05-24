@@ -119,7 +119,7 @@ def str2int(s):
     if type(s) == type(1):
         return s
     if s and type(s) == type(' '):
-        return int(re.match(r'^\s*(\d+)', s).groups()[0])
+        return int(re.match(r'^\s*([+-]?\d+)', s).groups()[0])
     return 0
 
 def str2float(s):

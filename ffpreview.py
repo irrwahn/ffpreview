@@ -751,8 +751,9 @@ class tmDialog(QDialog):
             if item.vfile:
                 self.loadfile = item.vfile
                 eprint(1, "load file ", item.vfile)
-                self.deleteLater()
-                super().accept()
+                break
+        self.deleteLater()
+        super().accept()
 
     def reject(self):
         self.deleteLater()

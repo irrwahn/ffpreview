@@ -62,7 +62,7 @@ force=False
 # NOTE: Even if this option is set to "False', ffpreview tries to reuse
 # existing files, provided all essential parameters still match the
 # current settings.
-reuse=False
+reuse=True
 
 # Start and end timestamp of time interval to produce thumbnails for.
 # Leave empty to always process entire files.

@@ -1167,9 +1167,9 @@ class sMainWindow(QMainWindow):
     vpath = None
     thdir = None
     cur = 0
+    view_locked = 0
     _dbg_num_tlabels = 0
     _dbg_num_qobjects = 0
-    view_locked = False
 
     def __new__(cls, *args, title='', **kwargs):
         if cls._instance is None:
@@ -1257,15 +1257,31 @@ class sMainWindow(QMainWindow):
         # set final size
         self.setGeometry(tx, ty, tw, th)
 
+    def lock_view(self, lock=True):
+        if lock:
+            self.view_locked += 1
+            self.scroll.setEnabled(False)
+            self.set_cursor(disable=True)
+        else:
+            if self.view_locked > 0:
+                self.view_locked -= 1
+            if self.view_locked == 0:
+                self.scroll.setEnabled(True)
+                self.set_cursor(disable=False)
+
     def rebuild_view(self):
+        self.lock_view(True)
         self.scroll.fill_grid(self.tlabels, self.show_progress)
         self.set_cursor()
+        self.lock_view(False)
 
     def clear_view(self):
+        self.lock_view(True)
         self.scroll.clear_grid()
         self.cur = 0
         if self.tlabels:
             self.tlabels.clear()
+        self.lock_view(False)
 
     def set_cursor(self, idx=None, disable=False):
         l = len(self.tlabels)
@@ -1369,20 +1385,24 @@ class sMainWindow(QMainWindow):
     def manage_thumbs(self, outdir):
         if self.view_locked:
             return
+        self.lock_view(True)
         dlg = tmDialog(self, odir=cfg['outdir'])
         res = dlg.exec_()
         if res == QDialog.Accepted:
             lfile = dlg.get_loadfile()
             if lfile:
                 self.load_view(lfile)
+        self.lock_view(False)
 
     def config_dlg(self):
         if self.view_locked:
             return
+        self.lock_view(True)
         dlg = cfgDialog(self)
         res = dlg.exec_()
         if res == QDialog.Accepted:
             self.load_view(self.fname)
+        self.lock_view(False)
 
     def about_dlg(self):
         dlg = aboutDialog(self)
@@ -1540,15 +1560,8 @@ class sMainWindow(QMainWindow):
             cfg['force'] = True
             self.load_view(self.fname)
 
-    def set_view_locked(self, lock=True):
-        self.view_locked = lock
-        self.scroll.setEnabled(not lock)
-        self.set_cursor(disable=lock)
-
     def load_view(self, fname):
-        if self.view_locked:
-            return
-        self.set_view_locked(True)
+        self.lock_view(True)
         # sanitize file name
         if not fname:
             fname = os.getcwd()
@@ -1561,7 +1574,7 @@ class sMainWindow(QMainWindow):
                         'Video Files ('+ cfg['vformats'] +');;All Files (*)',
                         options=QFileDialog.Options()|QFileDialog.DontUseNativeDialog)
         if not fname or not os.path.exists(fname) or not os.access(fname, os.R_OK):
-            self.set_view_locked(False)
+            self.lock_view(False)
             return
         self.fname = os.path.abspath(fname)
         self.vfile = os.path.basename(self.fname)
@@ -1583,7 +1596,7 @@ class sMainWindow(QMainWindow):
         self.thinfo, ok = get_thinfo(self.fname, self.thdir)
         if self.thinfo is None:
             self.statdsp[0].setText('Unrecognized file format')
-            self.set_view_locked(False)
+            self.lock_view(False)
             return
         if not ok:
             # (re)generate thumbnails and index file
@@ -1613,9 +1626,9 @@ class sMainWindow(QMainWindow):
         self.statdsp[1].setText(str(self.thinfo['method']))
         self.optimize_geometry()
         QApplication.processEvents()
-        self.set_view_locked(False)
         # reset force flag to avoid accidental rebuild for every file
         cfg['force'] = False
+        self.lock_view(False)
 
 
 ############################################################

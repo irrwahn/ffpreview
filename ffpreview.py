@@ -577,18 +577,92 @@ class tLabel(QWidget):
         self.notify.emit({'type': 'context_menu', 'id': self, 'pos': self.mapToGlobal(event.pos())})
 
 
+class tFlowLayout(QLayout):
+    """ Based on Qt flowlayout example, heavily optimized for speed
+        in this specific use case, stripped down to bare minimum. """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._items = []
+        self._icnt = 0
+        self._do_layout = False
+
+    def __del__(self):
+        self.clear()
+
+    def clear(self):
+        for i in range(self._icnt):
+            self._items[i].widget().deleteLater()
+        self._icnt = 0
+        del self._items[:]
+        self.items = []
+
+    def reInit(self, size=0):
+        self.clear()
+        self._items = [None] * size
+
+    def enableLayout(self, doit=True):
+        self._do_layout = doit
+
+    def addItem(self, item):
+        self._items[self._icnt] = item
+        self._icnt += 1
+
+    def itemAt(self, index):
+        if 0 <= index < self._icnt:
+            return self._items[index]
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        if self._do_layout:
+            return self.doLayout(QRect(0, 0, width, 0), True)
+        return 0
+
+    def setGeometry(self, rect):
+        if self._do_layout:
+            self.doLayout(rect, False)
+
+    def sizeHint(self):
+        return QSize()
+
+    def doLayout(self, rect, testonly):
+        if not self._icnt:
+            return 0
+        x = rect.x()
+        y = rect.y()
+        right = rect.right() + 1
+        iszhint = self._items[0].sizeHint()
+        iwidth = iszhint.width()
+        iheight = iszhint.height()
+        ngaps = int(right / iwidth)
+        gap = 0 if ngaps < 1 else (right % iwidth) / ngaps
+        for i in range(self._icnt):
+            nextX = x + iwidth
+            if nextX > right:
+                x = rect.x()
+                y = y + iheight
+                nextX = x + iwidth + gap
+            else:
+                nextX += gap
+            if not testonly:
+                self._items[i].setGeometry(QRect(QPoint(x, y), iszhint))
+            x = nextX
+        return y + iheight - rect.y()
+
+
 class tScrollArea(QScrollArea):
     notify = pyqtSignal(dict)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.delayTimeout = 200
+        self.delayTimeout = 50
         self._resizeTimer = QTimer(self)
         self._resizeTimer.timeout.connect(self._delayedUpdate)
 
     def resizeEvent(self, event):
         self._resizeTimer.start(self.delayTimeout)
-        super().resizeEvent(event)
+        self.rsz_event = event
 
     def _delayedUpdate(self):
         self._resizeTimer.stop()
@@ -596,6 +670,7 @@ class tScrollArea(QScrollArea):
         self.notify.emit({'type': 'scroll_do_update'})
 
     def do_update(self, tlwidth, tlheight):
+        super().resizeEvent(self.rsz_event)
         if tlwidth < 1 or tlheight < 1:
             return
         rows = int(self.viewport().height() / tlheight + 0.5)
@@ -606,22 +681,20 @@ class tScrollArea(QScrollArea):
             cols = 1
         if cols != cfg['grid_columns']:
             cfg['grid_columns'] = cols
-            self.notify.emit({'type': 'rebuild_view'})
 
     def clear_grid(self):
-        layout = self.widget().layout()
-        while layout.count():
-            layout.takeAt(0).widget().deleteLater()
+        self.widget().layout().clear()
+        return
 
     def fill_grid(self, tlabels, progress_cb=None):
-        slave = self.widget()
-        layout = slave.layout()
-        slave.setUpdatesEnabled(False)
         l = len(tlabels)
+        self.setUpdatesEnabled(False)
+        layout = self.widget().layout()
+        layout.reInit(l)
+        layout.enableLayout(False)
         x = 0; y = 0; cnt = 0
         for tl in tlabels:
-            #layout.removeWidget(tl)
-            layout.addWidget(tl, y, x)
+            layout.addWidget(tl)
             if progress_cb and cnt % 100 == 0:
                 progress_cb(cnt, l)
             x += 1
@@ -632,7 +705,8 @@ class tScrollArea(QScrollArea):
             cfg['grid_rows'] = y + 1
         if y == 0 and x < cfg['grid_columns']:
             cfg['grid_columns'] = x
-        slave.setUpdatesEnabled(True)
+        layout.enableLayout(True)
+        self.setUpdatesEnabled(True)
 
 
 class tmQTreeWidget(QTreeWidget):
@@ -1418,8 +1492,6 @@ class sMainWindow(QMainWindow):
             self.set_cursorw(event['id'])
         elif event['type'] == 'context_menu':
             self.show_contextmenu(event['id'], event['pos'])
-        elif event['type'] == 'rebuild_view':
-            self.rebuild_view()
         elif event['type'] == 'scroll_do_update':
             if not self.view_locked:
                 self.scroll.do_update(self.tlwidth, self.tlheight)
@@ -1451,9 +1523,7 @@ class sMainWindow(QMainWindow):
         statbar.addWidget(self.progbar)
         # set up thumbnail view area
         thumb_frame = QWidget()
-        thumb_layout = QGridLayout(thumb_frame)
-        thumb_layout.setContentsMargins(0, 0, 0, 0)
-        thumb_layout.setSpacing(0)
+        thumb_layout = tFlowLayout(thumb_frame)
         self.scroll = tScrollArea()
         self.scroll.notify.connect(self.notify_receive)
         self.scroll.setWidget(thumb_frame)

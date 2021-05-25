@@ -185,7 +185,7 @@ class ffConfig:
         'outdir': '',
         'grid_columns': 5,
         'grid_rows': 4,
-        'thumb_width': '192',
+        'thumb_width': 192,
         'ffprobe': 'ffprobe',
         'ffmpeg': 'ffmpeg',
         'player': 'mpv --no-ordered-chapters --start=%t %f',
@@ -193,12 +193,12 @@ class ffConfig:
         'force': 'False',
         'reuse': 'False',
         'method': 'iframe',
-        'frame_skip': '200',
-        'time_skip': '60',
+        'frame_skip': 200,
+        'time_skip': 60,
         'scene_thresh': '0.2',
         'customvf': 'scdet=s=1:t=12',
-        'start': '0',
-        'end': '0',
+        'start': 0,
+        'end': 0,
         'addss': -1,
         'verbosity': 0,
         'batch': 0,
@@ -339,6 +339,7 @@ class ffConfig:
         cfg['outdir'] = make_outdir(cfg['outdir'])
         eprint(1, 'outdir =', cfg['outdir'])
         # commit to successfully prepared config
+        cls.fixup_cfg(cfg)
         return cls.set(cfg)
 
     @classmethod
@@ -351,8 +352,11 @@ class ffConfig:
         except Exception as e:
             eprint(1, str(e), '(config file', fname, 'missing or corrupt)', vo=vo)
             return False
-        else:
-            eprint(1, 'read config from', fname, vo=vo)
+        eprint(1, 'read config from', fname, vo=vo)
+        return cls.fixup_cfg(cfg)
+
+    @classmethod
+    def fixup_cfg(cls, cfg):
         # fix up types of non-string options
         cfg['force'] = str2bool(cfg['force'])
         cfg['reuse'] = str2bool(cfg['reuse'])
@@ -1072,7 +1076,7 @@ class cfgDialog(QDialog):
         try:
             with open(fn) as file:
                 lines = [line.rstrip() for line in file]
-        except:
+        except Exception as e:
             eprint(1, str(e))
             lines = []
         if '[Default]' not in lines:

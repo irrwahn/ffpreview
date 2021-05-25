@@ -745,6 +745,7 @@ class tmDialog(QDialog):
         self.dlg_layout.addLayout(self.btn_layout)
         QShortcut('Del', self).activated.connect(self.remove)
         QShortcut('F5', self).activated.connect(self.refresh_list)
+        self.open()
         self.refresh_list()
         hint = self.tree_widget.sizeHintForColumn(0)
         mwid = int(self.width() / 8 * 5)
@@ -761,7 +762,10 @@ class tmDialog(QDialog):
         super().accept()
 
     def refresh_list(self):
-        self.ilist = get_indexfiles(self.outdir)
+        def show_progress(n, tot):
+            self.tot_label.setText('Scanning %d/%d' % (n, tot))
+            QApplication.processEvents()
+        self.ilist = get_indexfiles(self.outdir, show_progress)
         self.redraw_list()
         self.filter_edit.setFocus()
 
@@ -2009,9 +2013,15 @@ def batch_process(fname):
     return ok
 
 # get list of all index files for thumbnail manager
-def get_indexfiles(path):
+def get_indexfiles(path, prog_cb=None):
     flist = []
-    for sd in os.listdir(path):
+    dlist = os.listdir(path)
+    dlen = len(dlist)
+    dcnt = 0
+    for sd in dlist:
+        if prog_cb and not dcnt % 20:
+            prog_cb(dcnt, dlen)
+        dcnt += 1
         d = os.path.join(path, sd)
         if not os.path.isdir(d):
             continue

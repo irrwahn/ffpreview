@@ -671,6 +671,7 @@ class tmDialog(QDialog):
     def __init__(self, *args, odir='', **kwargs):
         super().__init__(*args, **kwargs)
         self.outdir = odir
+        self.setAttribute(Qt.WA_DeleteOnClose)
         self.setWindowTitle("Thumbnail Manager")
         self.resize(800, 700)
         self.dlg_layout = QVBoxLayout(self)
@@ -757,12 +758,7 @@ class tmDialog(QDialog):
                 self.loadfile = item.vfile
                 eprint(1, "load file ", item.vfile)
                 break
-        self.deleteLater()
         super().accept()
-
-    def reject(self):
-        self.deleteLater()
-        super().reject()
 
     def refresh_list(self):
         self.ilist = get_indexfiles(self.outdir)
@@ -852,6 +848,7 @@ class tmDialog(QDialog):
 class aboutDialog(QDialog):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.setAttribute(Qt.WA_DeleteOnClose)
         self.setWindowTitle('Help & About')
         self.setFixedSize(600, 600)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -882,14 +879,6 @@ class aboutDialog(QDialog):
         self.dlg_layout.addWidget(self.help_pane)
         self.dlg_layout.addLayout(self.btn_layout)
 
-    def accept(self):
-        self.deleteLater()
-        super().accept()
-
-    def reject(self):
-        self.deleteLater()
-        super().reject()
-
 
 class cfgDialog(QDialog):
     ilist = []
@@ -917,6 +906,7 @@ class cfgDialog(QDialog):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.setAttribute(Qt.WA_DeleteOnClose)
         self.setWindowTitle('Preferences')
         self.table_widget = QTableWidget()
         self.table_widget.setSelectionMode(QAbstractItemView.NoSelection)
@@ -967,13 +957,8 @@ class cfgDialog(QDialog):
         self.dlg_layout.addLayout(self.btn_layout)
         self.refresh()
 
-    def reject(self):
-        self.deleteLater()
-        super().reject()
-
     def accept(self):
         self.apply()
-        self.deleteLater()
         super().accept()
 
     def reset(self):

@@ -636,7 +636,7 @@ class tFlowLayout(QLayout):
         iwidth = iszhint.width()
         iheight = iszhint.height()
         ngaps = int(right / iwidth)
-        gap = 0 if ngaps < 1 else (right % iwidth) / ngaps
+        gap = 0 if ngaps < 1 else int((right % iwidth) / ngaps)
         for i in range(self._icnt):
             nextX = x + iwidth
             if nextX > right:
@@ -1184,7 +1184,7 @@ class cfgDialog(QDialog):
             elif o[1][0] == 'spin':
                 w = QSpinBox()
                 w.setRange(o[1][1], o[1][2])
-                w.setValue(self.cfg[o[0]])
+                w.setValue(int(self.cfg[o[0]]))
                 w.setToolTip(o[2])
                 w.valueChanged.connect(self.changed)
             elif o[1][0] == 'dblspin':
@@ -1209,7 +1209,7 @@ class cfgDialog(QDialog):
                 s = s % 3600
                 m = s / 60
                 s = s % 60
-                w = self._time_edit(h, m, s, ms)
+                w = self._time_edit(int(h), int(m), int(s), int(ms))
                 w.setToolTip(o[2])
             elif o[1][0] == 'mcombo':
                 w = QComboBox()
@@ -1405,8 +1405,8 @@ class sMainWindow(QMainWindow):
             # kbd shortcut, show context menu for active label
             tlabel = self.tlabels[self.cur]
             pos = tlabel.pos()
-            pos.setX(pos.x() + self.tlwidth / 2)
-            pos.setY(pos.y() + self.tlheight / 2)
+            pos.setX(pos.x() + int(self.tlwidth / 2))
+            pos.setY(pos.y() + int(self.tlheight / 2))
         else:
             # kbd shortcut, have no active label
             pos = QPoint(self.width()/2, self.height()/2)

@@ -611,8 +611,7 @@ class tScrollArea(QScrollArea):
     def clear_grid(self):
         layout = self.widget().layout()
         while layout.count():
-            chw = layout.takeAt(0).widget()
-            chw.deleteLater()
+            layout.takeAt(0).widget().deleteLater()
 
     def fill_grid(self, tlabels, progress_cb=None):
         slave = self.widget()
@@ -621,7 +620,7 @@ class tScrollArea(QScrollArea):
         l = len(tlabels)
         x = 0; y = 0; cnt = 0
         for tl in tlabels:
-            layout.removeWidget(tl)
+            #layout.removeWidget(tl)
             layout.addWidget(tl, y, x)
             if progress_cb and cnt % 100 == 0:
                 progress_cb(cnt, l)

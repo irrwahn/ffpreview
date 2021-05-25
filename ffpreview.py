@@ -147,6 +147,10 @@ def ppdict(dic, excl=[]):
         s = sf.getvalue()
     return s.strip()
 
+def proc_running():
+    global proc
+    return proc is not None
+
 def kill_proc(p=None):
     if p is None and 'proc' in globals():
         global proc
@@ -1394,7 +1398,8 @@ class sMainWindow(QMainWindow):
 
     def esc_action(self):
         if self.view_locked:
-            self.abort_build()
+            if proc_running():
+                self.abort_build()
         elif self.windowState() & Qt.WindowFullScreen:
             self.toggle_fullscreen()
         else:
@@ -1446,7 +1451,8 @@ class sMainWindow(QMainWindow):
             menu.addAction('Thumbnail Manager', lambda: self.manage_thumbs(cfg['outdir']))
             menu.addAction('Preferences', lambda: self.config_dlg())
         else:
-            menu.addAction('Abort Operation', self.abort_build)
+            if proc_running():
+                menu.addAction('Abort Operation', self.abort_build)
         menu.addSeparator()
         menu.addAction('Help && About', self.about_dlg)
         menu.addSeparator()
@@ -1603,7 +1609,7 @@ class sMainWindow(QMainWindow):
 
     def abort_build(self):
         mbox = QMessageBox(self)
-        mbox.setWindowTitle('Abort Process')
+        mbox.setWindowTitle('Abort Operation')
         mbox.setIcon(QMessageBox.Warning)
         mbox.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         mbox.setDefaultButton(QMessageBox.No)

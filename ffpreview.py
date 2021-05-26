@@ -214,7 +214,6 @@ class ffConfig:
         'manage': 0,
         'platform': platform.system(),
         'env': os.environ.copy(),
-        'exec': 'exec',
         'vformats': '*.3g2 *.3gp *.asf *.avi *.divx *.evo *.f4v *.flv *'
                     '.m2p *.m2ts *.mkv *.mk3d *.mov *.mp4 *.mpeg *.mpg '
                     '*.ogg *.ogv *.ogv *.qt *.rmvb *.vob *.webm *.wmv'
@@ -229,7 +228,6 @@ class ffConfig:
         # initialize default values
         if cls.cfg_dflt['platform'] == 'Windows':
             cls.cfg_dflt['env']['PATH'] = sys.path[0] + os.pathsep + cls.cfg_dflt['env']['PATH']
-            cls.cfg_dflt['exec'] = ''
         cfg = cls.get_defaults()
         # parse command line arguments
         parser = argparse.ArgumentParser(
@@ -1704,7 +1702,7 @@ def proc_cmd(cmd):
     retval = 0
     try:
         eprint(2, 'run', cmd)
-        proc = Popen(cfg['exec'] + ' ' + cmd, shell=True, stdout=PIPE, stderr=PIPE, env=cfg['env'])
+        proc = Popen(cmd, shell=False, stdout=PIPE, stderr=PIPE, env=cfg['env'])
         stdout, stderr = proc.communicate()
         stdout = stdout.decode()
         stderr = stderr.decode()
@@ -1725,16 +1723,16 @@ def get_meta(vidfile):
     if proc:
         return meta, False
     # count subtitle streams
-    cmd = cfg['ffprobe'] + ' -v error -select_streams s -show_entries stream=index'
-    cmd += ' -of csv=p=0 "' + vidfile + '"'
+    cmd = [cfg['ffprobe'], '-v', 'error', '-select_streams', 's',
+           '-show_entries', 'stream=index', '-of', 'csv=p=0', vidfile]
     out, err, rc = proc_cmd(cmd)
     if rc == 0:
         meta['nsubs'] = len(out.splitlines())
         eprint(2, 'number of subtitle streams:', meta['nsubs'])
     # get frames / duration / fps
     # try ffprobe fast method
-    cmd = cfg['ffprobe'] + ' -v error -select_streams v:0 -show_streams'
-    cmd += ' -show_format -of json "' + vidfile + '"'
+    cmd = [cfg['ffprobe'], '-v', 'error', '-select_streams', 'v:0',
+           '-show_streams', '-show_format', '-of', 'json', vidfile]
     out, err, rc = proc_cmd(cmd)
     if rc == 0:
         info = json.loads(out)
@@ -1760,9 +1758,8 @@ def get_meta(vidfile):
                 meta['fps'] = fps
                 return meta, True
     # no dice, try ffprobe slow method
-    cmd = cfg['ffprobe'] + ' -v error -select_streams v:0 -of json -count_packets'
-    cmd += ' -show_entries format=duration:stream=nb_read_packets'
-    cmd += ' "' + vidfile + '"'
+    cmd = [cfg['ffprobe'], '-v', 'error', '-select_streams', 'v:0', '-of', 'json', '-count_packets',
+           '-show_entries', 'format=duration:stream=nb_read_packets', vidfile]
     out, err, rc = proc_cmd(cmd)
     if rc == 0:
         info = json.loads(out)
@@ -1772,8 +1769,8 @@ def get_meta(vidfile):
         meta['fps'] = round(meta['frames'] / meta['duration'], 2)
         return meta, True
     # ffprobe didn't cut it, try ffmpeg instead
-    cmd = cfg['ffmpeg'] + ' -nostats -i "' + vidfile + '"'
-    cmd += ' -c:v copy -f rawvideo -y ' + os.devnull
+    cmd = [cfg['ffmpeg'], '-nostats', '-i', vidfile, '-c:v', 'copy',
+           '-f', 'rawvideo', '-y', os.devnull]
     out, err, rc = proc_cmd(cmd)
     if rc == 0:
         for line in io.StringIO(err).readlines():
@@ -1793,34 +1790,48 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     rc = False
     if proc:
         return thinfo, rc
+
+    # ffmpeg filter escaping, see:
+    # https://ffmpeg.org/ffmpeg-filters.html#Notes-on-filtergraph-escaping
+    def fff_esc(s):
+        # 1. escape ' and :
+        s = s.replace("'", r"\'").replace(':', r'\:')
+        # 2. escape \ and ' and ,
+        s = s.replace('\\', '\\\\').replace("'", r"\'")
+        # 3. apparently [ and ] also have to be escaped?!
+        s = s.replace('[', r'\[').replace(']', r'\]')
+        # 4. time will tell, if we're still missing some
+        return s
+
     # generate thumbnail images from video
     pictemplate = '%08d.png'
-    cmd = cfg['ffmpeg'] + ' -loglevel info -hide_banner -y'
+    cmd = [cfg['ffmpeg'], '-loglevel', 'info', '-hide_banner', '-y']
     if cfg['start']:
-        cmd += ' -ss ' + str(cfg['start'])
+        cmd.extend( ['-ss', str(cfg['start'])] )
     if cfg['end']:
-        cmd += ' -to ' + str(cfg['end'])
-    cmd += ' -i "' + vidfile + '"'
+        cmd.extend( ['-to', str(cfg['end'])] )
+    cmd.extend( ['-i', vidfile] )
+
     if cfg['method'] == 'scene':
-        cmd += ' -vf "select=gt(scene\,' + str(cfg['scene_thresh']) + ')'
+        flt = 'select=gt(scene,' + str(cfg['scene_thresh']) + ')'
     elif cfg['method'] == 'skip':
-        cmd += ' -vf "select=not(mod(n\,' + str(cfg['frame_skip']) + '))'
+        flt = 'select=not(mod(n,' + str(cfg['frame_skip']) + '))'
     elif cfg['method'] == 'time':
         fs = int(float(cfg['time_skip']) * float(thinfo['fps']))
-        cmd += ' -vf "select=not(mod(n\,' + str(fs) + '))'
+        flt = 'select=not(mod(n,' + str(fs) + '))'
     elif cfg['method'] == 'customvf':
-        cmd += ' -vf "' + cfg['customvf']
+        flt = cfg['customvf']
     else: # iframe
-        cmd += ' -vf "select=eq(pict_type\,I)'
-    cmd += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1'
+        flt = 'select=eq(pict_type,I)'
+    flt += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1'
     if thinfo['addss'] >= 0:
-        cmd += ',subtitles="' + vidfile + '":si=' + str(thinfo['addss'])
-    cmd += '" -vsync vfr "' + os.path.join(thdir, pictemplate) + '"'
+        flt += ',subtitles=' + fff_esc(vidfile) + ':si=' + str(thinfo['addss'])
+    cmd.extend( ['-vf', flt, '-vsync', 'vfr', os.path.join(thdir, pictemplate)] )
     eprint(2, cmd)
     ebuf = ''
     cnt = 0
     try:
-        proc = Popen(cfg['exec'] + ' ' + cmd, shell=True, stderr=PIPE, env=cfg['env'])
+        proc = Popen(cmd, shell=False, stderr=PIPE, env=cfg['env'])
         while proc.poll() is None:
             line = proc.stderr.readline()
             if line:
@@ -1838,7 +1849,7 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
         retval = proc.wait()
         proc = None
         if retval != 0:
-            eprint(0, cmd + '\n  returned %d' % retval)
+            eprint(0, cmd, '\n  returned %d' % retval)
             eprint(1, ebuf)
         thinfo['count'] = cnt
         with open(os.path.join(thdir, _FFPREVIEW_IDX), 'w') as idxfile:
@@ -1846,7 +1857,7 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
             json.dump(thinfo, idxfile, indent=2)
             rc = True
     except Exception as e:
-        eprint(0, cmd + '\n  failed: ' + str(e))
+        eprint(0, cmd, '\n  failed:', str(e))
         proc = kill_proc(proc)
     return thinfo, rc
 
@@ -1857,14 +1868,17 @@ def play_video(filename, start='0', paused=False):
 
     # keep this for Windows, for the time being
     if cfg['platform'] == 'Windows':
-        if paused and cfg['plpaused']:
-            cmd = cfg['plpaused']
-        else:
-            cmd = cfg['player']
-        cmd = cmd.replace('%t', '"' + start + '"')
-        cmd = cmd.replace('%f', '"' + filename + '"')
-        eprint(2, cmd)
-        Popen(cfg['exec'] + ' ' + cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL,
+        # prepare argument vector
+        cmd = cfg['plpaused'] if paused and cfg['plpaused'] else cfg['player']
+        args = shlex.split(cmd)
+        for i in range(len(args)):
+            args[i] = args[i].replace('%t', start).replace('%f', filename)
+        if cfg['verbosity'] > 0:
+            cstr = ''
+            for a in args:
+                cstr += "'" + a + "', "
+            eprint(1, 'args = [', cstr + ']')
+        Popen(args, shell=False, stdout=DEVNULL, stderr=DEVNULL,
                 env=cfg['env'], start_new_session=True)
         return
 

@@ -1709,10 +1709,10 @@ def proc_cmd(cmd):
         retval = proc.wait()
         proc = None
         if retval != 0:
-            eprint(0, cmd + '\n  returned %d' % retval)
+            eprint(0, cmd, '\n  returned %d' % retval)
             eprint(1, stderr)
     except Exception as e:
-        eprint(0, cmd + '\n  failed: ' + str(e))
+        eprint(0, cmd, '\n  failed: ' + str(e))
         proc = kill_proc(proc)
     return stdout, stderr, retval
 

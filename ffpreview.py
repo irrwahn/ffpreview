@@ -1713,8 +1713,8 @@ def get_meta(vidfile):
             info = json.loads(stdout.decode())
             meta['frames'] = int(info['streams'][0]['nb_read_packets'])
             d = float(info['format']['duration'])
-            meta['duration'] = d
-            meta['fps'] = round(meta['frames'] / d, 2)
+            meta['duration'] = max(d, 0.0001)
+            meta['fps'] = round(meta['frames'] / meta['duration'], 2)
             return meta, True
         else:
             eprint(0, cmd + '\n  returned %d' % retval)
@@ -1737,8 +1737,8 @@ def get_meta(vidfile):
                 if m:
                     meta['frames'] = int(m.group(1))
                     d = hms2s(m.group(2))
-                    meta['duration'] = d
-                    meta['fps'] = round(meta['frames'] / d, 2)
+                    meta['duration'] = max(d, 0.0001)
+                    meta['fps'] = round(meta['frames'] / meta['duration'], 2)
                     return meta, True
         else:
             eprint(0, cmd + '\n  returned %d' % retval)

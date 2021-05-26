@@ -588,25 +588,14 @@ class tLabel(QWidget):
 class tFlowLayout(QLayout):
     """ Based on Qt flowlayout example, heavily optimized for speed
         in this specific use case, stripped down to bare minimum. """
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, size=1):
         super().__init__(parent)
-        self._items = []
+        self._items = [None] * size
         self._icnt = 0
         self._layout_enabled = False
 
-    def __del__(self):
-        self.clear()
-
-    def clear(self):
-        self._icnt = 0
-        self._items.clear()
-
-    def reInit(self, size=0):
-        self.clear()
-        self._items = [None] * size
-
-    def enableLayout(self, doit=True):
-        self._layout_enabled = doit
+    def enableLayout(self):
+        self._layout_enabled = True
 
     def addItem(self, item):
         self._items[self._icnt] = item
@@ -688,14 +677,15 @@ class tScrollArea(QScrollArea):
             cfg['grid_columns'] = cols
 
     def clear_grid(self):
-        self.widget().layout().clear()
+        if self.widget():
+            self.takeWidget().deleteLater()
 
     def fill_grid(self, tlabels, progress_cb=None):
-        l = len(tlabels)
         self.setUpdatesEnabled(False)
-        layout = self.widget().layout()
-        layout.enableLayout(False)
-        layout.reInit(l)
+        l = len(tlabels)
+        thumb_pane = QWidget()
+        self.setWidget(thumb_pane)
+        layout = tFlowLayout(thumb_pane, l)
         x = 0; y = 0; cnt = 0
         for tl in tlabels:
             layout.addWidget(tl)
@@ -709,7 +699,7 @@ class tScrollArea(QScrollArea):
             cfg['grid_rows'] = y + 1
         if y == 0 and x < cfg['grid_columns']:
             cfg['grid_columns'] = x
-        layout.enableLayout(True)
+        layout.enableLayout()
         self.setUpdatesEnabled(True)
 
 
@@ -1348,9 +1338,6 @@ class sMainWindow(QMainWindow):
 
     def clear_view(self):
         self.lock_view(True)
-        for tl in self.tlabels:
-            tl.hide()
-            tl.deleteLater()
         self.scroll.clear_grid()
         self.cur = 0
         self.tlabels.clear()

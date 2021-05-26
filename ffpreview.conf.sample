@@ -99,7 +99,8 @@ customvf=scdet=s=1:t=12
 
 # Add rendered captions from specified subtitle stream. Stream numbering
 # starts at 0, set to -1 to disable. If the specified stream is not found,
-# this setting is silently ignored.
+# this setting is silently ignored. Also, this setting only works when
+# start time is zero, i.e. the video is processed from the beginning.
 addss=-1
 
 # EOF

@@ -1824,7 +1824,7 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     else: # iframe
         flt = 'select=eq(pict_type,I)'
     flt += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1'
-    if thinfo['addss'] >= 0:
+    if thinfo['addss'] >= 0 and not cfg['start']:
         flt += ',subtitles=' + fff_esc(vidfile) + ':si=' + str(thinfo['addss'])
     cmd.extend( ['-vf', flt, '-vsync', 'vfr', os.path.join(thdir, pictemplate)] )
     eprint(2, cmd)

@@ -3,7 +3,9 @@
 Ffpreview is a python script that acts as a front-end for ffmpeg to
 generate interactive thumbnail previews for video files.
 
-![ffpreview_1r](https://user-images.githubusercontent.com/21294666/119243320-dedc4280-bb65-11eb-8343-29104805447c.png)
+
+![ffpreview_r](https://user-images.githubusercontent.com/21294666/119719447-12221880-be69-11eb-9f27-54c05dab9980.png)
+
 
 ## Requirements
 

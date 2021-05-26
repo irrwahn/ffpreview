@@ -592,24 +592,21 @@ class tFlowLayout(QLayout):
         super().__init__(parent)
         self._items = []
         self._icnt = 0
-        self._do_layout = False
+        self._layout_enabled = False
 
     def __del__(self):
         self.clear()
 
     def clear(self):
-        for i in range(self._icnt):
-            self._items[i].widget().deleteLater()
         self._icnt = 0
-        del self._items[:]
-        self.items = []
+        self._items.clear()
 
     def reInit(self, size=0):
         self.clear()
         self._items = [None] * size
 
     def enableLayout(self, doit=True):
-        self._do_layout = doit
+        self._layout_enabled = doit
 
     def addItem(self, item):
         self._items[self._icnt] = item
@@ -620,15 +617,15 @@ class tFlowLayout(QLayout):
             return self._items[index]
 
     def hasHeightForWidth(self):
-        return True
+        return self._layout_enabled
 
     def heightForWidth(self, width):
-        if self._do_layout:
+        if self._layout_enabled:
             return self.doLayout(QRect(0, 0, width, 0), True)
-        return 0
+        return -1
 
     def setGeometry(self, rect):
-        if self._do_layout:
+        if self._layout_enabled:
             self.doLayout(rect, False)
 
     def sizeHint(self):
@@ -692,14 +689,13 @@ class tScrollArea(QScrollArea):
 
     def clear_grid(self):
         self.widget().layout().clear()
-        return
 
     def fill_grid(self, tlabels, progress_cb=None):
         l = len(tlabels)
         self.setUpdatesEnabled(False)
         layout = self.widget().layout()
-        layout.reInit(l)
         layout.enableLayout(False)
+        layout.reInit(l)
         x = 0; y = 0; cnt = 0
         for tl in tlabels:
             layout.addWidget(tl)
@@ -1347,15 +1343,17 @@ class sMainWindow(QMainWindow):
     def rebuild_view(self):
         self.lock_view(True)
         self.scroll.fill_grid(self.tlabels, self.show_progress)
-        self.set_cursor()
         self.lock_view(False)
+        self.set_cursor()
 
     def clear_view(self):
         self.lock_view(True)
+        for tl in self.tlabels:
+            tl.hide()
+            tl.deleteLater()
         self.scroll.clear_grid()
         self.cur = 0
-        if self.tlabels:
-            self.tlabels.clear()
+        self.tlabels.clear()
         self.lock_view(False)
 
     def set_cursor(self, idx=None, disable=False):

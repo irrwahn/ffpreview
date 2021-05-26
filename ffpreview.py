@@ -1813,16 +1813,16 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     cmd.extend( ['-i', vidfile] )
 
     if cfg['method'] == 'scene':
-        flt = 'select=gt(scene,' + str(cfg['scene_thresh']) + ')'
+        flt = 'select=gt(scene\,' + str(cfg['scene_thresh']) + ')'
     elif cfg['method'] == 'skip':
-        flt = 'select=not(mod(n,' + str(cfg['frame_skip']) + '))'
+        flt = 'select=not(mod(n\,' + str(cfg['frame_skip']) + '))'
     elif cfg['method'] == 'time':
         fs = int(float(cfg['time_skip']) * float(thinfo['fps']))
-        flt = 'select=not(mod(n,' + str(fs) + '))'
+        flt = 'select=not(mod(n\,' + str(fs) + '))'
     elif cfg['method'] == 'customvf':
         flt = cfg['customvf']
     else: # iframe
-        flt = 'select=eq(pict_type,I)'
+        flt = 'select=eq(pict_type\,I)'
     flt += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1'
     if thinfo['addss'] >= 0 and not cfg['start']:
         flt += ',subtitles=' + fff_esc(vidfile) + ':si=' + str(thinfo['addss'])

@@ -130,6 +130,11 @@ def str2float(s):
         return float(m.groups()[0])
     return 0.0
 
+def sfrac2float(s):
+    a = s.split('/')
+    d = 1 if len(a) < 2 else str2float(a[1])
+    return str2float(a[0]) / (d if d else 1)
+
 def hr_size(sz, prec=1):
     i = 0
     while sz >= 1024:
@@ -1692,86 +1697,95 @@ class sMainWindow(QMainWindow):
 ############################################################
 # Helper functions
 
+def proc_cmd(cmd):
+    global proc
+    if proc:
+        return '', '', None
+    retval = 0
+    try:
+        eprint(2, 'run', cmd)
+        proc = Popen(cfg['exec'] + ' ' + cmd, shell=True, stdout=PIPE, stderr=PIPE, env=cfg['env'])
+        stdout, stderr = proc.communicate()
+        stdout = stdout.decode()
+        stderr = stderr.decode()
+        retval = proc.wait()
+        proc = None
+        if retval != 0:
+            eprint(0, cmd + '\n  returned %d' % retval)
+            eprint(1, stderr)
+    except Exception as e:
+        eprint(0, cmd + '\n  failed: ' + str(e))
+        proc = kill_proc(proc)
+    return stdout, stderr, retval
+
 # get video meta information
 def get_meta(vidfile):
-    global proc
     meta = { 'frames': -1, 'duration':-1, 'fps':-1.0, 'nsubs': -1 }
+    global proc
     if proc:
         return meta, False
-    meta['nsubs'] = count_subss(vidfile)
-    # try ffprobe method
-    try:
-        cmd = cfg['ffprobe'] + ' -v error -select_streams v:0 -of json -count_packets'
-        cmd += ' -show_entries format=duration:stream=nb_read_packets'
-        cmd += ' "' + vidfile + '"'
-        eprint(2, cmd)
-        proc = Popen(cfg['exec'] + ' ' + cmd, shell=True, stdout=PIPE, stderr=PIPE, env=cfg['env'])
-        stdout, stderr = proc.communicate()
-        retval = proc.wait()
-        proc = None
-        if retval == 0:
-            info = json.loads(stdout.decode())
-            meta['frames'] = int(info['streams'][0]['nb_read_packets'])
-            d = float(info['format']['duration'])
-            meta['duration'] = max(d, 0.0001)
-            meta['fps'] = round(meta['frames'] / meta['duration'], 2)
-            return meta, True
-        else:
-            eprint(0, cmd + '\n  returned %d' % retval)
-            eprint(1, stderr.decode())
-    except Exception as e:
-        eprint(0, cmd + '\n  failed: ' + str(e))
-        proc = kill_proc(proc)
+    # count subtitle streams
+    cmd = cfg['ffprobe'] + ' -v error -select_streams s -show_entries stream=index'
+    cmd += ' -of csv=p=0 "' + vidfile + '"'
+    out, err, rc = proc_cmd(cmd)
+    if rc == 0:
+        meta['nsubs'] = len(out.splitlines())
+        eprint(2, 'number of subtitle streams:', meta['nsubs'])
+    # get frames / duration / fps
+    # try ffprobe fast method
+    cmd = cfg['ffprobe'] + ' -v error -select_streams v:0 -show_streams'
+    cmd += ' -show_format -of json "' + vidfile + '"'
+    out, err, rc = proc_cmd(cmd)
+    if rc == 0:
+        info = json.loads(out)
+        strinf = info['streams'][0]
+        fmtinf = info['format']
+        d = f = None
+        fps = -1
+        if 'duration' in strinf:
+            d = float(strinf['duration'])
+        elif 'duration' in fmtinf:
+            d = float(fmtinf['duration'])
+        if d is not None:
+            d = max(d, 0.000001)
+            if 'nb_frames' in strinf:
+                f = int(strinf['nb_frames'])
+                fps = f / d
+            elif 'avg_frame_rate' in strinf:
+                fps = sfrac2float(strinf['avg_frame_rate'])
+                f = int(fps * d)
+            if f is not None:
+                meta['duration'] = d
+                meta['frames'] = f
+                meta['fps'] = fps
+                return meta, True
+    # no dice, try ffprobe slow method
+    cmd = cfg['ffprobe'] + ' -v error -select_streams v:0 -of json -count_packets'
+    cmd += ' -show_entries format=duration:stream=nb_read_packets'
+    cmd += ' "' + vidfile + '"'
+    out, err, rc = proc_cmd(cmd)
+    if rc == 0:
+        info = json.loads(out)
+        meta['frames'] = int(info['streams'][0]['nb_read_packets'])
+        d = float(info['format']['duration'])
+        meta['duration'] = max(d, 0.0001)
+        meta['fps'] = round(meta['frames'] / meta['duration'], 2)
+        return meta, True
     # ffprobe didn't cut it, try ffmpeg instead
-    try:
-        cmd = cfg['ffmpeg'] + ' -nostats -i "' + vidfile + '"'
-        cmd += ' -c:v copy -f rawvideo -y ' + os.devnull
-        eprint(2, cmd)
-        proc = Popen(cfg['exec'] + ' ' + cmd, shell=True, stdout=PIPE, stderr=PIPE, env=cfg['env'])
-        stdout, stderr = proc.communicate()
-        retval = proc.wait()
-        proc = None
-        if retval == 0:
-            for line in io.StringIO(stderr.decode()).readlines():
-                m = re.match(r'^frame=\s*(\d+).*time=\s*(\d+:\d+:\d+(\.\d+)?)', line)
-                if m:
-                    meta['frames'] = int(m.group(1))
-                    d = hms2s(m.group(2))
-                    meta['duration'] = max(d, 0.0001)
-                    meta['fps'] = round(meta['frames'] / meta['duration'], 2)
-                    return meta, True
-        else:
-            eprint(0, cmd + '\n  returned %d' % retval)
-            eprint(1, stderr.decode())
-    except Exception as e:
-        eprint(0, cmd + '\n  failed: ' + str(e))
-        proc = kill_proc(proc)
+    cmd = cfg['ffmpeg'] + ' -nostats -i "' + vidfile + '"'
+    cmd += ' -c:v copy -f rawvideo -y ' + os.devnull
+    out, err, rc = proc_cmd(cmd)
+    if rc == 0:
+        for line in io.StringIO(err).readlines():
+            m = re.match(r'^frame=\s*(\d+).*time=\s*(\d+:\d+:\d+(\.\d+)?)', line)
+            if m:
+                meta['frames'] = int(m.group(1))
+                d = hms2s(m.group(2))
+                meta['duration'] = max(d, 0.0001)
+                meta['fps'] = round(meta['frames'] / meta['duration'], 2)
+                return meta, True
+    # not our lucky day, eh?!
     return meta, False
-
-# count subtitle streams
-def count_subss(vidfile):
-    global proc
-    if proc:
-        return -1
-    nstreams = -1
-    try:
-        cmd = cfg['ffprobe'] + ' -v error -select_streams s -show_entries stream=index -of csv=p=0'
-        cmd += ' "' + vidfile + '"'
-        eprint(2, cmd)
-        proc = Popen(cfg['exec'] + ' ' + cmd, shell=True, stdout=PIPE, stderr=PIPE, env=cfg['env'])
-        stdout, stderr = proc.communicate()
-        retval = proc.wait()
-        proc = None
-        if retval == 0:
-            nstreams = len(stdout.decode().splitlines())
-            eprint(2, 'number of subtitle streams:', nstreams)
-        else:
-            eprint(0, cmd + '\n  returned %d' % retval)
-            eprint(1, stderr.decode())
-    except Exception as e:
-        eprint(0, cmd + '\n  failed: ' + str(e))
-        proc = kill_proc(proc)
-    return nstreams
 
 # extract thumbnails from video and collect timestamps
 def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
@@ -1800,7 +1814,7 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
         cmd += ' -vf "select=eq(pict_type\,I)'
     cmd += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1'
     if thinfo['addss'] >= 0:
-        cmd += ',subtitles=\'' + vidfile + '\':si=' + str(thinfo['addss'])
+        cmd += ',subtitles="' + vidfile + '":si=' + str(thinfo['addss'])
     cmd += '" -vsync vfr "' + os.path.join(thdir, pictemplate) + '"'
     eprint(2, cmd)
     ebuf = ''

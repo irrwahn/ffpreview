@@ -99,11 +99,11 @@ def hms2s(ts):
         h = m; m = s; s = float(t[i])
     return float(h * 3600) + m * 60 + s
 
-def s2hms(ts, frac=True):
+def s2hms(ts, frac=True, zerohours=False):
     s, ms = divmod(float(ts), 1.0)
     m, s = divmod(s, 60)
     h, m = divmod(m, 60)
-    res = '' if h < 1 else '%02d:' % h
+    res = '' if h < 1 and zerohours == False else '%02d:' % h
     res += '%02d:%02d' % (m, s)
     res += '' if not frac else ('%.3f' % ms).lstrip('0')
     return res
@@ -1426,7 +1426,7 @@ class sMainWindow(QMainWindow):
             if tlabel or self.fname:
                 copymenu = menu.addMenu('Copy')
                 if tlabel:
-                    copymenu.addAction('Timestamp [H:M:S.ms]', lambda: self.clipboard.setText(s2hms(tlabel.info[2])))
+                    copymenu.addAction('Timestamp [H:M:S.ms]', lambda: self.clipboard.setText(s2hms(tlabel.info[2], zerohours=True)))
                     copymenu.addAction('Timestamp [S.ms]', lambda: self.clipboard.setText(tlabel.info[2]))
                 if self.fname:
                     copymenu.addAction('Original Filename', lambda: self.clipboard.setText(self.fname))

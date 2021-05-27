@@ -216,8 +216,8 @@ class ffConfig:
         'manage': 0,
         'platform': platform.system(),
         'env': os.environ.copy(),
-        'vformats': '*.3g2 *.3gp *.asf *.avi *.divx *.evo *.f4v *.flv *'
-                    '.m2p *.m2ts *.mkv *.mk3d *.mov *.mp4 *.mpeg *.mpg '
+        'vformats': '*.3g2 *.3gp *.asf *.avi *.divx *.evo *.f4v *.flv '
+                    '*.m2p *.m2ts *.mkv *.mk3d *.mov *.mp4 *.mpeg *.mpg '
                     '*.ogg *.ogv *.ogv *.qt *.rmvb *.vob *.webm *.wmv'
     }
     def __new__(cls):

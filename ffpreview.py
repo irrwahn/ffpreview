@@ -13,6 +13,8 @@ _FFPREVIEW_VERSION = '0.3+'
 
 _FFPREVIEW_IDX = 'ffpreview.idx'
 
+_FFPREVIEW_CFG = 'ffpreview.conf'
+
 _FF_DEBUG = False
 
 _FFPREVIEW_HELP = """
@@ -189,7 +191,7 @@ class ffConfig:
     """ Configuration class with only class attributes, not instantiated."""
     cfg = None
     cfg_dflt = {
-        'conffile': 'ffpreview.conf',
+        'conffile': _FFPREVIEW_CFG,
         'vid': [''],
         'outdir': '',
         'grid_columns': 5,
@@ -284,21 +286,23 @@ class ffConfig:
                     % (_FFPREVIEW_VERSION, _PYTHON_VERSION, cfg['platform']))
             die(0)
         # parse config file
+        vo = args.verbose if args.verbose else 0
         if args.config:
             cfg['conffile'] = args.config
+            cls.load_cfgfile(cfg, cfg['conffile'], vo)
         else:
-            # try to locate a user config file
+            cdirs = [ os.path.dirname(os.path.realpath(__file__)) ]
+            if os.environ.get('APPDATA'):
+                cdirs.append(os.environ.get('APPDATA'))
+            if os.environ.get('XDG_CONFIG_HOME'):
+                cdirs.append(os.environ.get('XDG_CONFIG_HOME'))
             if os.environ.get('HOME'):
-                home_cfg = os.path.join(os.environ.get('HOME'), '.config')
-            cfg['conffile'] = os.path.join(
-                os.environ.get('XDG_CONFIG_HOME') or
-                os.environ.get('APPDATA') or
-                home_cfg or
-                os.path.dirname(os.path.realpath(__file__)),
-                cfg['conffile']
-            )
-        vo = args.verbose if args.verbose else 0
-        cls.load_cfgfile(cfg, cfg['conffile'], vo)
+                cdirs.append(os.path.join(os.environ.get('HOME'), '.config'))
+            for d in cdirs:
+                cf = os.path.join(d, _FFPREVIEW_CFG)
+                if cls.load_cfgfile(cfg, cf, vo):
+                    cfg['conffile'] = cf
+                    break
         # evaluate remaining command line args
         cfg['vid'] = args.filename
         if args.outdir:

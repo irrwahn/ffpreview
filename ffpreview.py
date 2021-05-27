@@ -1609,6 +1609,7 @@ class sMainWindow(QMainWindow):
                      'incomplete set of thumbnails.\n\nAbort anyway?')
         if QMessageBox.Yes == mbox.exec_():
             kill_proc()
+            return True
 
     def force_rebuild(self):
         if self.thinfo['duration'] > 300:
@@ -1874,7 +1875,7 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
         with open(os.path.join(thdir, _FFPREVIEW_IDX), 'w') as idxfile:
             thinfo['date'] = int(time.time())
             json.dump(thinfo, idxfile, indent=2)
-            rc = True
+        rc = (retval == 0)
     except Exception as e:
         eprint(0, cmd, '\n  failed:', str(e))
         proc = kill_proc(proc)

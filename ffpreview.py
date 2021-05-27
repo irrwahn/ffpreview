@@ -344,11 +344,6 @@ class ffConfig:
             cfg['batch'] = args.batch
         if args.manage:
             cfg['manage'] = args.manage
-        # prepare output directory
-        if not cfg['outdir']:
-            cfg['outdir'] = tempfile.gettempdir()
-        cfg['outdir'] = make_outdir(cfg['outdir'])
-        eprint(1, 'outdir =', cfg['outdir'])
         # commit to successfully prepared config
         cls.fixup_cfg(cfg)
         return cls.set(cfg)
@@ -368,6 +363,11 @@ class ffConfig:
 
     @classmethod
     def fixup_cfg(cls, cfg):
+        # prepare output directory
+        if not cfg['outdir']:
+            cfg['outdir'] = tempfile.gettempdir()
+        cfg['outdir'] = make_outdir(cfg['outdir'])
+        eprint(1, 'outdir =', cfg['outdir'])
         # fix up types of non-string options
         cfg['force'] = str2bool(cfg['force'])
         cfg['reuse'] = str2bool(cfg['reuse'])

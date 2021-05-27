@@ -1872,15 +1872,9 @@ def play_video(filename, start='0', paused=False):
     if cfg['platform'] == 'Windows':
         # prepare argument vector
         cmd = cfg['plpaused'] if paused and cfg['plpaused'] else cfg['player']
-        args = shlex.split(cmd)
-        for i in range(len(args)):
-            args[i] = args[i].replace('%t', start).replace('%f', filename)
-        if cfg['verbosity'] > 0:
-            cstr = ''
-            for a in args:
-                cstr += "'" + a + "', "
-            eprint(1, 'args = [', cstr + ']')
-        Popen(args, shell=False, stdout=DEVNULL, stderr=DEVNULL,
+        cmd = cmd.replace('%t', start).replace('%f', '"'+filename+'"')
+        eprint(1, 'cmd =', cmd)
+        Popen(cmd, shell=False, stdout=DEVNULL, stderr=DEVNULL,
                 env=cfg['env'], start_new_session=True)
         return
 

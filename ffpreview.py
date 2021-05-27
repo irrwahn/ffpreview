@@ -1788,24 +1788,33 @@ def get_meta(vidfile):
     # not our lucky day, eh?!
     return meta, False
 
+# extract subtitles
+def extract_subs(vidfile, thinfo):
+    try:
+        fd, subs_file = tempfile.mkstemp(suffix='.mkv', prefix='ffpreview_subs_')
+        os.close(fd)
+        eprint(2, 'created subtitle dump file:', subs_file)
+        cmd = [ cfg['ffmpeg'] ]
+        if cfg['start']:
+            cmd.extend( ['-ss', str(cfg['start'])] )
+        if cfg['end']:
+            cmd.extend( ['-to', str(cfg['end'])] )
+        cmd.extend( ['-i', vidfile, '-map', '0', '-c', 'copy', '-vn', '-an', '-y', subs_file] )
+        out, err, rc = proc_cmd(cmd)
+        if rc == 0:
+            eprint(2, 'copied subtitles to:', subs_file)
+            return subs_file
+    except Exception as e:
+        eprint(0, str(e))
+    return None
+
 # extract thumbnails from video and collect timestamps
 def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     global proc
     rc = False
     if proc:
         return thinfo, rc
-
-    # ffmpeg filter escaping, see:
-    # https://ffmpeg.org/ffmpeg-filters.html#Notes-on-filtergraph-escaping
-    def fff_esc(s):
-        # 1. escape ' and :
-        s = s.replace("'", r"\'").replace(':', r'\:')
-        # 2. escape \ and ' (again!) plus [ and ] and , and ;
-        s = s.replace('\\', '\\\\').replace("'", r"\'")
-        s = s.replace('[', r'\[').replace(']', r'\]').replace(',', r'\,').replace(';', r'\;')
-        return s
-
-    # generate thumbnail images from video
+    # prepare command line
     pictemplate = '%08d.png'
     cmd = [cfg['ffmpeg'], '-loglevel', 'info', '-hide_banner', '-y']
     if cfg['start']:
@@ -1813,7 +1822,7 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     if cfg['end']:
         cmd.extend( ['-to', str(cfg['end'])] )
     cmd.extend( ['-i', vidfile] )
-
+    # prepare filters
     if cfg['method'] == 'scene':
         flt = 'select=gt(scene\,' + str(cfg['scene_thresh']) + ')'
     elif cfg['method'] == 'skip':
@@ -1826,10 +1835,18 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     else: # iframe
         flt = 'select=eq(pict_type\,I)'
     flt += ',showinfo,scale=' + str(cfg['thumb_width']) + ':-1'
-    if thinfo['addss'] >= 0 and not cfg['start']:
-        flt += ',subtitles=' + fff_esc(vidfile) + ':si=' + str(thinfo['addss'])
+    # dump subtitles and add to filter
+    subs_file = None
+    if thinfo['addss'] >= 0:
+        subs_file = extract_subs(vidfile, thinfo)
+        if subs_file:
+            # escape windows path; unix temp file name should be fine?
+            sf = subs_file.replace('\\', r'\\\\').replace(':', r'\\:')
+            flt += ',subtitles=' + sf + ':si=' + str(thinfo['addss'])
+    # finalize command line
     cmd.extend( ['-vf', flt, '-vsync', 'vfr', os.path.join(thdir, pictemplate)] )
     eprint(2, cmd)
+    # generate thumbnail images from video
     ebuf = ''
     cnt = 0
     try:
@@ -1861,6 +1878,11 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     except Exception as e:
         eprint(0, cmd, '\n  failed:', str(e))
         proc = kill_proc(proc)
+    if subs_file:
+        try:
+            os.remove(subs_file)
+        except Exception as e:
+            eprint(0, str(e))
     return thinfo, rc
 
 # open video in player

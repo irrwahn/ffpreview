@@ -160,9 +160,7 @@ $ ./ffpreview.py -b /some/directory/*
 
 ## Known issues
 
-* Subtitle rendering is flaky at best. In particular, it does not work
-  when setting a start time and currently chokes on Windows paths.
-  Consider it an experimental feature.
+* Subtitle rendering is flaky. Consider it an experimental feature.
 
 ## License
 

@@ -97,10 +97,12 @@ time_skip=60
 # to learn more about video filter expressions.
 customvf=scdet=s=1:t=12
 
+# EXPERIMENTAL:
 # Add rendered captions from specified subtitle stream. Stream numbering
 # starts at 0, set to -1 to disable. If the specified stream is not found,
 # this setting is silently ignored. Also, this setting only works when
 # start time is zero, i.e. the video is processed from the beginning.
+# To top it off it will choke on Windows paths.
 addss=-1
 
 # EOF

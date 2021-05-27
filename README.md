@@ -158,6 +158,12 @@ $ ./ffpreview.py -b /some/directory/*
 ```
 **Note:** `ffpreview` does _not_ recursively traverse subdirectories.
 
+## Known issues
+
+* Subtitle rendering is flaky at best. In particular, it does not work
+  when setting a start time and currently chokes on Windows paths.
+  Consider it an experimental feature.
+
 ## License
 
 Ffpreview is distributed under the Modified ("3-clause") BSD License.

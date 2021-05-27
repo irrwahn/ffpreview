@@ -1800,11 +1800,9 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
     def fff_esc(s):
         # 1. escape ' and :
         s = s.replace("'", r"\'").replace(':', r'\:')
-        # 2. escape \ and ' and ,
+        # 2. escape \ and ' (again!) plus [ and ] and , and ;
         s = s.replace('\\', '\\\\').replace("'", r"\'")
-        # 3. apparently [ and ] also have to be escaped?!
-        s = s.replace('[', r'\[').replace(']', r'\]')
-        # 4. time will tell, if we're still missing some
+        s = s.replace('[', r'\[').replace(']', r'\]').replace(',', r'\,').replace(';', r'\;')
         return s
 
     # generate thumbnail images from video

@@ -54,6 +54,9 @@ _FFPREVIEW_HELP = """
     </tr><tr>
       <td class="m">Ctrl+M</td>
       <td>Open thumbnail manager</td>
+    </tr><tr>
+      <td class="m">Ctrl+B</td>
+      <td>Open batch processing dialog</td>
     </tr>
 </tbody></table>
 """
@@ -247,6 +250,7 @@ class ffConfig:
                    '  Ctrl+G            adjust window geometry for optimal fit\n'
                    '  Ctrl+O            show open file dialog\n'
                    '  Ctrl+M            open thumbnail manager\n'
+                   '  Ctrl+B            open batch processing dialog\n'
                    '  Ctrl+Alt+P        open preferences dialog\n'
                    '  Alt+H             open about dialog\n'
                    '  Double-click,\n'
@@ -1223,6 +1227,117 @@ class cfgDialog(QDialog):
         self.reset_button.setEnabled(False)
 
 
+class batchDialog(QDialog):
+    def __init__(self, *args, fnames=[], **kwargs):
+        super().__init__(*args, **kwargs)
+        self._abort = False
+        self._done = False
+        self.fnames = fnames
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setWindowTitle('Batch Processing')
+        self.resize(800, 700)
+        self.logview = QTextEdit()
+        self.logview.setReadOnly(True)
+        self.logview.setStyleSheet('QTextEdit {border: none;}')
+        self.statbar = QHBoxLayout()
+        self.proglabel = QLabel('')
+        self.progbar = QProgressBar()
+        self.progbar.resize(100, 20)
+        self.progbar.hide()
+        self.statbar.addWidget(self.proglabel)
+        self.statbar.addWidget(self.progbar)
+        self.abort_button = QPushButton('Abort')
+        self.abort_button.setIcon(ffIcon.close)
+        self.abort_button.clicked.connect(self.abort)
+        self.layout = QVBoxLayout(self)
+        self.layout.addWidget(self.logview)
+        self.layout.addLayout(self.statbar)
+        self.layout.addWidget(self.abort_button)
+        self.show()
+        self.run_batch()
+        self.proglabel.setText('')
+        self.progbar.hide()
+        self.abort_button.setText('Ok')
+        self.abort_button.setIcon(ffIcon.ok)
+        self.abort_button.clicked.disconnect()
+        self.abort_button.clicked.connect(self.accept)
+
+    def log_append(self, *args):
+        sio = io.StringIO()
+        print(self.logview.toHtml(), *args, file=sio, end='')
+        self.logview.setHtml(sio.getvalue())
+        sio.close()
+        sb = self.logview.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
+    def reject(self):
+        if self._done:
+            self.accept()
+        else:
+            self.abort()
+
+    def abort(self):
+        mbox = QMessageBox(self)
+        mbox.setWindowTitle('Abort Operation')
+        mbox.setIcon(QMessageBox.Warning)
+        mbox.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        mbox.setDefaultButton(QMessageBox.No)
+        mbox.setText('Aborting now will likely leave you with a broken or '
+                     'incomplete set of thumbnails.\n\nAbort anyway?')
+        if QMessageBox.Yes == mbox.exec_():
+            kill_proc()
+            self._abort = True
+
+    def prog_cb(self, n, tot):
+        if not n and not tot:
+            self.proglabel.setText('')
+            self.progbar.hide()
+        self.proglabel.setText('%d / %d' % (n, tot))
+        self.progbar.setValue(int(n * 100 / max(0.01, tot)))
+        self.progbar.show()
+        QApplication.processEvents()
+
+    def run_batch(self):
+        cnt = 0
+        nfiles = len(self.fnames)
+        for fname in self.fnames:
+            self.prog_cb(0, 0)
+            if self._abort:
+                break
+            fname = os.path.abspath(fname)
+            vfile = os.path.basename(fname)
+            thdir = os.path.join(cfg['outdir'], vfile)
+            cnt += 1
+            self.log_append('%d/%d:'%(cnt,nfiles), vfile)
+            QApplication.processEvents()
+            if not os.path.exists(fname) or not os.access(fname, os.R_OK):
+                self.log_append('  <span style="color:red;">no permission</span>\n')
+                continue
+            if os.path.isdir(fname):
+                self.log_append('  <span style="color:red;">is a directory</span>\n')
+                continue
+            thinfo, ok = get_thinfo(fname, thdir)
+            if thinfo is None:
+                self.log_append(' <span style="color:red;">failed</span>\n')
+                continue
+            if ok:
+                self.log_append(' <span style="color:blue;">nothing to do</span>\n')
+                continue
+            clear_thumbdir(thdir)
+            thinfo, ok = make_thumbs(fname, thinfo, thdir, self.prog_cb)
+            if ok:
+                self.log_append(' <span style="color:green;">ok</span>\n')
+            else:
+                if self._abort:
+                    clear_thumbdir(thdir)
+                self.log_append(' <span style="color:red;">failed</span>\n')
+        if self._abort:
+            self.log_append('<p style="color:red;">aborted</p>\n')
+        else:
+            self.log_append('<p>done</p>\n')
+        self._done = True
+
+
 class sMainWindow(QMainWindow):
     """ Application main window class singleton. """
     _instance = None
@@ -1441,6 +1556,7 @@ class sMainWindow(QMainWindow):
             if not (self.windowState() & (Qt.WindowFullScreen | Qt.WindowMaximized)):
                 menu.addAction('Window Best Fit', self.optimize_geometry)
             menu.addAction('Thumbnail Manager', lambda: self.manage_thumbs(cfg['outdir']))
+            menu.addAction('Batch Processing', self.batch_dlg)
             menu.addAction('Preferences', lambda: self.config_dlg())
         else:
             if proc_running():
@@ -1565,6 +1681,7 @@ class sMainWindow(QMainWindow):
         QShortcut('Ctrl+Return', self).activated.connect(lambda: self.contextMenuEvent(None))
         QShortcut('Ctrl+Alt+P', self).activated.connect(self.config_dlg)
         QShortcut('Alt+H', self).activated.connect(self.about_dlg)
+        QShortcut('Ctrl+B', self).activated.connect(self.batch_dlg)
 
 
     def show_progress(self, n, tot):
@@ -1625,6 +1742,22 @@ class sMainWindow(QMainWindow):
         if rebuild:
             cfg['force'] = True
             self.load_view(self.fname)
+
+    def batch_dlg(self):
+        if self.view_locked:
+            return
+        self.lock_view(True)
+        fdir = os.path.dirname(self.fname) if self.fname else os.getcwd()
+        fnames, _ = QFileDialog.getOpenFileNames(self, 'Select Files for Batch Processing',
+                    fdir, 'Video Files ('+ cfg['vformats'] +');;All Files (*)',
+                    options=QFileDialog.Options()|QFileDialog.DontUseNativeDialog)
+        if len(fnames) < 1:
+            self.lock_view(False)
+            return
+        dlg = batchDialog(self, fnames=fnames)
+        res = dlg.exec_()
+        cfg['force'] = False
+        self.lock_view(False)
 
     def load_view(self, fname):
         self.lock_view(True)

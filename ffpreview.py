@@ -158,20 +158,23 @@ def ppdict(dic, excl=[]):
     return s.strip()
 
 def proc_running():
-    global proc
-    return proc is not None
+    if 'proc' in globals():
+        global proc
+        return proc
 
 def kill_proc(p=None):
     if p is None and 'proc' in globals():
         global proc
-        p = proc
-    if p is not None:
-        eprint(1, 'killing subprocess: %s' % p.args)
-        p.terminate()
+    else:
+        proc = p
+    if proc is not None:
+        eprint(1, 'killing subprocess: %s' % proc.args)
+        proc.terminate()
         try:
-            p.wait(timeout=3)
+            proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
-            p.kill()
+            proc.kill()
+        proc = None
     return None
 
 def die(rc):
@@ -304,6 +307,9 @@ class ffConfig:
                 cdirs.append(os.path.join(os.environ.get('HOME'), '.config'))
             for d in cdirs:
                 cf = os.path.join(d, _FFPREVIEW_CFG)
+                if not os.path.exists(cf):
+                    eprint(2, 'no such file:', cf, vo=vo)
+                    continue
                 if cls.load_cfgfile(cfg, cf, vo):
                     cfg['conffile'] = cf
                     break
@@ -360,7 +366,7 @@ class ffConfig:
             for option in fconf.options('Default'):
                 cfg[option] = fconf.get('Default', option)
         except Exception as e:
-            eprint(1, str(e), '(config file', fname, 'missing or corrupt)', vo=vo)
+            eprint(1, str(e), '(config file', fname, 'corrupt?)', vo=vo)
             return False
         eprint(1, 'read config from', fname, vo=vo)
         return cls.fixup_cfg(cfg)
@@ -835,7 +841,6 @@ class tmDialog(QDialog):
         for item in self.tree_widget.selectedItems():
             if item.vfile:
                 self.loadfile = item.vfile
-                eprint(1, "load file ", item.vfile)
                 break
         super().accept()
 
@@ -1385,7 +1390,7 @@ class sMainWindow(QMainWindow):
         fy = fg.y()
         fw = fg.width()
         fh = fg.height()
-        eprint(3, 'w', wx, wy, ww, wh, 'f', fx, fy, fw, fh)
+        eprint(4, 'w', wx, wy, ww, wh, 'f', fx, fy, fw, fh)
         # calculate overhead WRT to thumbnail viewport
         scpol = self.scroll.verticalScrollBarPolicy()
         self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
@@ -1399,7 +1404,7 @@ class sMainWindow(QMainWindow):
         minw = gw + ow
         minh = gh + oh
         self.setMinimumSize(minw, minh)
-        eprint(3, 'o', ow, oh, 'g', gw, gh, 'c,r', cfg['grid_columns'], cfg['grid_rows'])
+        eprint(4, 'o', ow, oh, 'g', gw, gh, 'c,r', cfg['grid_columns'], cfg['grid_rows'])
         # get current available(!) screen geometry
         screens = QGuiApplication.screens()
         for sc in reversed(screens):
@@ -1410,7 +1415,7 @@ class sMainWindow(QMainWindow):
             sh = scg.height()
             if wx >= sx and wy >= sy and wx < sx+sw and wy < sy+sh:
                 break
-        eprint(3, 's', sx, sy, sw, sh)
+        eprint(4, 's', sx, sy, sw, sh)
         # tentative (wanted) window geometry
         tx = max(wx, sx)
         ty = max(wy, sy)
@@ -1419,7 +1424,7 @@ class sMainWindow(QMainWindow):
         # available remaining screen estate (right and below)
         aw = sw - (tx - sx)
         ah = sh - (ty - sy)
-        eprint(3, 't', tx, ty, tw, th, 'a', aw, ah)
+        eprint(4, 't', tx, ty, tw, th, 'a', aw, ah)
         # try to fit the window on screen, move or resize if necessary
         if tw > aw - (fw - ww):
             frame_left = (fx + fw) - (wx +ww)
@@ -1436,7 +1441,7 @@ class sMainWindow(QMainWindow):
         # round down window dimensions to thumb grid
         tw = int((tw - ow) / gw) * gw + ow
         th = int((th - oh) / gh) * gh + oh
-        eprint(3, 't', tx, ty, tw, th)
+        eprint(4, 't', tx, ty, tw, th)
         # set final size
         self.setGeometry(tx, ty, tw, th)
 
@@ -1697,7 +1702,7 @@ class sMainWindow(QMainWindow):
             with open(os.path.join(self.thdir, _FFPREVIEW_IDX), 'r') as idxfile:
                 idx = json.load(idxfile)
                 if cfg['verbosity'] > 3:
-                    eprint(4, 'idx = ' + json.dumps(idx, indent=2))
+                    eprint(4, 'idx =', json.dumps(idx, indent=2))
                 self.show_progress(0, idx['count'])
                 for th in idx['th']:
                     if th[0] % 100 == 0:
@@ -1780,6 +1785,7 @@ class sMainWindow(QMainWindow):
         self.vpath = os.path.dirname(self.fname)
         self.thdir = os.path.abspath(os.path.join(cfg['outdir'], self.vfile))
         self.setWindowTitle('ffpreview - ' + self.vfile)
+        eprint(1, "open file:", self.fname)
         # clear previous view
         for sd in self.statdsp:
             sd.setText('')
@@ -1834,12 +1840,12 @@ class sMainWindow(QMainWindow):
 # Helper functions
 
 def proc_cmd(cmd):
-    global proc
-    if proc:
+    if proc_running():
         return '', '', None
+    global proc
     retval = 0
     try:
-        eprint(2, 'run', cmd)
+        eprint(1, 'run:', cmd)
         proc = Popen(cmd, shell=False, stdout=PIPE, stderr=PIPE, env=cfg['env'])
         stdout, stderr = proc.communicate()
         stdout = stdout.decode()
@@ -1848,17 +1854,16 @@ def proc_cmd(cmd):
         proc = None
         if retval != 0:
             eprint(0, cmd, '\n  returned %d' % retval)
-            eprint(1, stderr)
+            eprint(2, stderr)
     except Exception as e:
-        eprint(0, cmd, '\n  failed: ' + str(e))
+        eprint(0, cmd, '\n  failed:', str(e))
         proc = kill_proc(proc)
     return stdout, stderr, retval
 
 # get video meta information
 def get_meta(vidfile):
     meta = { 'frames': -1, 'duration':-1, 'fps':-1.0, 'nsubs': -1 }
-    global proc
-    if proc:
+    if proc_running():
         return meta, False
     # count subtitle streams
     cmd = [cfg['ffprobe'], '-v', 'error', '-select_streams', 's',
@@ -1866,7 +1871,7 @@ def get_meta(vidfile):
     out, err, rc = proc_cmd(cmd)
     if rc == 0:
         meta['nsubs'] = len(out.splitlines())
-        eprint(2, 'number of subtitle streams:', meta['nsubs'])
+        eprint(1, 'number of subtitle streams:', meta['nsubs'])
     # get frames / duration / fps
     # try ffprobe fast method
     cmd = [cfg['ffprobe'], '-v', 'error', '-select_streams', 'v:0',
@@ -1894,6 +1899,7 @@ def get_meta(vidfile):
                 meta['duration'] = d
                 meta['frames'] = f
                 meta['fps'] = fps
+                eprint(3, 'meta =', meta)
                 return meta, True
     # no dice, try ffprobe slow method
     cmd = [cfg['ffprobe'], '-v', 'error', '-select_streams', 'v:0', '-of', 'json', '-count_packets',
@@ -1905,6 +1911,7 @@ def get_meta(vidfile):
         d = float(info['format']['duration'])
         meta['duration'] = max(d, 0.0001)
         meta['fps'] = round(meta['frames'] / meta['duration'], 2)
+        eprint(3, 'meta =', meta)
         return meta, True
     # ffprobe didn't cut it, try ffmpeg instead
     cmd = [cfg['ffmpeg'], '-nostats', '-i', vidfile, '-c:v', 'copy',
@@ -1918,6 +1925,7 @@ def get_meta(vidfile):
                 d = hms2s(m.group(2))
                 meta['duration'] = max(d, 0.0001)
                 meta['fps'] = round(meta['frames'] / meta['duration'], 2)
+                eprint(3, 'meta =', meta)
                 return meta, True
     # not our lucky day, eh?!
     return meta, False
@@ -1936,7 +1944,7 @@ def extract_subs(vidfile, thinfo):
         cmd.extend( ['-i', vidfile, '-map', '0', '-c', 'copy', '-vn', '-an', '-y', subs_file] )
         out, err, rc = proc_cmd(cmd)
         if rc == 0:
-            eprint(2, 'copied subtitles to:', subs_file)
+            eprint(1, 'copied subtitles to:', subs_file)
             return subs_file
     except Exception as e:
         eprint(0, str(e))
@@ -1944,10 +1952,6 @@ def extract_subs(vidfile, thinfo):
 
 # extract thumbnails from video and collect timestamps
 def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
-    global proc
-    rc = False
-    if proc:
-        return thinfo, rc
     # prepare command line
     pictemplate = '%08d.png'
     cmd = [cfg['ffmpeg'], '-loglevel', 'info', '-hide_banner', '-y']
@@ -1979,10 +1983,14 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
             flt += ',subtitles=' + sf + ':si=' + str(thinfo['addss'])
     # finalize command line
     cmd.extend( ['-vf', flt, '-vsync', 'vfr', os.path.join(thdir, pictemplate)] )
-    eprint(2, cmd)
     # generate thumbnail images from video
+    rc = False
+    if proc_running():
+        return thinfo, rc
+    global proc
     ebuf = ''
     cnt = 0
+    eprint(1, 'run:', cmd)
     try:
         proc = Popen(cmd, shell=False, stderr=PIPE, env=cfg['env'])
         while proc.poll() is None:
@@ -2003,7 +2011,7 @@ def make_thumbs(vidfile, thinfo, thdir, prog_cb=None):
         proc = None
         if retval != 0:
             eprint(0, cmd, '\n  returned %d' % retval)
-            eprint(1, ebuf)
+            eprint(2, ebuf)
         thinfo['count'] = cnt
         with open(os.path.join(thdir, _FFPREVIEW_IDX), 'w') as idxfile:
             thinfo['date'] = int(time.time())
@@ -2039,23 +2047,23 @@ def play_video(filename, start='0', paused=False):
     try:
         pid = os.fork()
         if pid > 0:
-            eprint(2, '1st fork ok')
+            eprint(3, '1st fork ok')
             status = os.waitid(os.P_PID, pid, os.WEXITED)
             if status.si_status:
                 eprint(0, 'child exit error:', status)
             else:
-                eprint(2, 'child exit ok')
+                eprint(3, 'child exit ok')
             return  # parent: back to business
     except Exception as e:
         eprint(0, '1st fork failed:', str(e))
-        os._exit(1)
+        return
     # child
     # become session leader and fork a second time
     os.setsid()
     try:
         pid = os.fork()
         if pid > 0:
-            eprint(2, '2nd fork ok')
+            eprint(3, '2nd fork ok')
             os._exit(0) # child done
     except Exception as e:
         eprint(0, '2nd fork failed:', str(e))
@@ -2072,11 +2080,7 @@ def play_video(filename, start='0', paused=False):
     args = shlex.split(cmd)
     for i in range(len(args)):
         args[i] = args[i].replace('%t', start).replace('%f', filename)
-    if cfg['verbosity'] > 0:
-        cstr = ''
-        for a in args:
-            cstr += "'" + a + "', "
-        eprint(1, 'args = [', cstr + ']')
+    eprint(1, 'run:', args)
     # close all fds and redirect stdin, stdout and stderr to /dev/null
     sys.stdout.flush()
     sys.stderr.flush()
@@ -2298,8 +2302,8 @@ def get_indexfiles(path, prog_cb=None):
             entry['idx'] = { 'count': cnt, 'date': int(os.path.getmtime(d)) }
         flist.append(entry)
     flist = sorted(flist, key=lambda k: k['tdir'])
-    if cfg['verbosity'] > 2:
-        eprint(3, json.dumps(flist, indent=2))
+    if cfg['verbosity'] > 3:
+        eprint(4, json.dumps(flist, indent=2))
     return flist
 
 ############################################################

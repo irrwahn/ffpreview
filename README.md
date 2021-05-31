@@ -25,7 +25,9 @@ for that purpose too, should `ffprobe` fail.
 
 Tested with Python 3.7.3, PyQt5 5.11.3.
 
-**Ffpreview has only been tested to work on Linux.**
+**FFpreview has only been tested to work on Linux.**  However, you may
+refer to `README_WIN.md` for notes on how it potentially can be made to
+run on Windows.
 
 ## Configuration
 

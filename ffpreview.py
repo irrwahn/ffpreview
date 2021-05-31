@@ -1872,6 +1872,16 @@ def get_meta(vidfile):
     if rc == 0:
         meta['nsubs'] = len(out.splitlines())
         eprint(1, 'number of subtitle streams:', meta['nsubs'])
+    else: # ffprobe failed, try using ffmpeg
+        cmd = [cfg['ffmpeg'], '-i', vidfile]
+        out, err, rc = proc_cmd(cmd)
+        nsubs = 0
+        for line in io.StringIO(err).readlines():
+            if re.match(r'\s*Stream #.*: Subtitle:', line):
+                nsubs += 1
+        if nsubs > 0:
+            meta['nsubs'] = nsubs
+            eprint(1, 'number of subtitle streams:', meta['nsubs'])
     # get frames / duration / fps
     # try ffprobe fast method
     cmd = [cfg['ffprobe'], '-v', 'error', '-select_streams', 'v:0',

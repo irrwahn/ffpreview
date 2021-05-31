@@ -1,6 +1,6 @@
-# Ffpreview
+# FFpreview
 
-Ffpreview is a python script that acts as a front-end for ffmpeg to
+FFpreview is a python script that acts as a front-end for FFmpeg to
 generate interactive thumbnail previews for video files.
 
 
@@ -12,14 +12,14 @@ generate interactive thumbnail previews for video files.
 To run `ffpreview.py` you will need Python version >= 3.7 installed,
 plus the PyQt5 python bindings for Qt5.
 
-As a hard requirement, ffpreview relies on the `ffmpeg` program to
+As a hard requirement, FFpreview relies on the `ffmpeg` program to
 generate the still frame thumbnails.  To make full use of the interactive
 aspects you will need a video player application that can be started from
 the command line. The `mpv` player is highly recommended, as it readily
-accepts all options passed by ffpreview.  Other video players (like e.g.
+accepts all options passed by FFpreview.  Other video players (like e.g.
 `vlc`) may only provide slightly degraded functionality.
 
-Additionally, ffpreview will use `ffprobe` (if available) to perform the
+Additionally, FFpreview will use `ffprobe` (if available) to perform the
 initial video file analysis, but will gracefully fall back to `ffmpeg`
 for that purpose too, should `ffprobe` fail.
 
@@ -36,8 +36,8 @@ the `ffpreview.conf.sample` example configuration file.
 
 ## Video filters
 
-The thumbnail sampling method presets available in `ffpreview` translate
-to `ffmpeg` filters as follows:
+The thumbnail sampling method presets available in FFpreview translate
+to FFmpeg filters as follows:
 
 `iframe` (_--iframe_, key frame detection):
 >   `-vf select=eq(pict_type,I), ...`
@@ -54,8 +54,8 @@ to `ffmpeg` filters as follows:
 `customvf` (_--customvf_, custom video filter):
 >   `-vf YOUR_CUSTOM_FILTER, ...`
 
-Please consult the official `ffmpeg`
-[documentation](https://ffmpeg.org/ffmpeg-filters.html#select_002c-aselect)
+Please consult the official
+[FFmpeg documentation](https://ffmpeg.org/ffmpeg-filters.html#select_002c-aselect)
 to learn more about video frame select filter expressions.
 
 ## Usage
@@ -123,36 +123,36 @@ window controls:
 ```
 ### Notes
 
-* In GUI mode, the --force flag is reset after the first view is
-  loaded, to prevent accidental rebuilds for subsequently opened
-  files. A forced rebuild can be initiated anytime via the context
-  menu. In batch mode the --force flag is applied to all input files.
+* In GUI mode, the `--force` flag is reset after the view is (re-)loaded,
+  to prevent unnecessary rebuilds for subsequently opened files. A forced
+  rebuild can be initiated anytime via the context menu. In batch mode
+  the `--force` flag is applied to _all_ specified input files.
 
 * The thumbnail manager, accessible via context menu or command line
-  option, provides a simple way to keep track of saved previews
-  thumbnails and allows for easy loading of previews or deletion of
+  option, provides a simple way to keep track of saved preview
+  thumbnails and allows for easy loading of previews, or deletion of
   broken/unwanted preview folders.
 
 ### Examples
 
-#### Start ffpreview with file open dialog:
+#### Start FFpreview with file open dialog:
 ```
 $ ./ffpreview.py
 $ ./ffpreview.py /path/to/some/directory
 ```
 
-#### Start ffpreview and show thumbnails for a single file:
+#### Start FFpreview and show thumbnails for a single file:
 ```
 $ ./ffpreview.py my_video.mp4
 $ ./ffpreview.py -o ~/scratch -w 256 -g 8x4 -N 10 some_movie.mkv
 ```
 
-#### Start ffpreview in thumbnail manager mode:
+#### Start FFpreview in thumbnail manager mode:
 ```
 $ ./ffpreview.py -m
 ```
 
-#### Run ffpreview in batch mode (console only, no GUI):
+#### Run FFpreview in console batch mode (no GUI):
 ```
 $ ./ffpreview.py -b movie1.mkv movie2.mp4 another.mpg
 $ ./ffpreview.py -b /some/directory/*
@@ -165,7 +165,7 @@ $ ./ffpreview.py -b /some/directory/*
 
 ## License
 
-Ffpreview is distributed under the Modified ("3-clause") BSD License.
+FFpreview is distributed under the Modified ("3-clause") BSD License.
 See `LICENSE` file for more information.
 
 ----------------------------------------------------------------------

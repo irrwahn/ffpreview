@@ -5,11 +5,13 @@ ffpreview.py
 
 Copyright (c) 2021 Urban Wallasch <irrwahn35@freenet.de>
 
-Ffpreview is distributed under the Modified ("3-clause") BSD License.
+FFpreview is distributed under the Modified ("3-clause") BSD License.
 See `LICENSE` file for more information.
 """
 
 _FFPREVIEW_VERSION = '0.3+'
+
+_FFPREVIEW_NAME = 'FFpreview'
 
 _FFPREVIEW_IDX = 'ffpreview.idx'
 
@@ -941,9 +943,10 @@ class aboutDialog(QDialog):
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.icon_label = QLabel()
         self.icon_label.setPixmap(ffIcon.ffpreview_pxm)
-        self.tag_label = QLabel('ffpreview %s\n'
+        self.tag_label = QLabel('%s %s\n'
                                 'Copyright (c) 2021, Urban Wallasch\n'
-                                'BSD 3-Clause License' % _FFPREVIEW_VERSION)
+                                'BSD 3-Clause License'
+                                % (_FFPREVIEW_NAME, _FFPREVIEW_VERSION))
         self.tag_label.setAlignment(Qt.AlignCenter)
         self.hdr_layout = QHBoxLayout()
         self.hdr_layout.addWidget(self.icon_label, 1)
@@ -1784,7 +1787,7 @@ class sMainWindow(QMainWindow):
         self.vfile = os.path.basename(self.fname)
         self.vpath = os.path.dirname(self.fname)
         self.thdir = os.path.abspath(os.path.join(cfg['outdir'], self.vfile))
-        self.setWindowTitle('ffpreview - ' + self.vfile)
+        self.setWindowTitle(_FFPREVIEW_NAME + ' - ' + self.vfile)
         eprint(1, "open file:", self.fname)
         # clear previous view
         for sd in self.statdsp:
@@ -2350,8 +2353,8 @@ def main():
     if not _FF_DEBUG:
         os.environ['QT_LOGGING_RULES'] = 'qt5ct.debug=false'
     app = QApplication(sys.argv)
-    app.setApplicationName('ffpreview')
-    root = sMainWindow(title='ffpreview %s' % _FFPREVIEW_VERSION)
+    app.setApplicationName(_FFPREVIEW_NAME)
+    root = sMainWindow(title=_FFPREVIEW_NAME + ' ' + _FFPREVIEW_VERSION)
 
     # start console debugging thread, if _FF_DEBUG is set
     if _FF_DEBUG:

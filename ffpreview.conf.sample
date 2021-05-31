@@ -1,4 +1,4 @@
-# Ffpreview example configuration file
+# FFpreview example configuration file
 #
 # Copy this file to "ffppreview.conf" and make the desired changes.
 
@@ -59,7 +59,7 @@ force=False
 
 # Reuse the settings found in an existing index file in the thumbnail
 # directory, if at all possible. This option is ignored in 'force' mode.
-# NOTE: Even if this option is set to "False', ffpreview tries to reuse
+# NOTE: Even if this option is set to "False', FFpreview tries to reuse
 # existing files, provided all essential parameters still match the
 # current settings.
 reuse=True
@@ -79,7 +79,7 @@ end=
 #  scene    - scene change detection, see 'scene_thresh'
 #  skip     - skip number of frames between thumbnails, see 'frame_skip'
 #  time     - sample a thumbnail every number of seconds, see 'time_skip'
-#  customvf - custom ffmpeg filter string, see 'customvf'
+#  customvf - custom FFmpeg filter string, see 'customvf'
 method=iframe
 
 # Scene change detection threshold for method 'scene'.
@@ -91,9 +91,9 @@ frame_skip=200
 # Sample interval in seconds for method 'time'.
 time_skip=60
 
-# Custom ffmpeg filter string for method 'customvf'. The configured
-# expression is passed verbatim as argument to ffmpeg's "-vf" option.
-# This is an advanced setting. Please consult the ffmpeg documentation
+# Custom FFmpeg filter string for method 'customvf'. The configured
+# expression is passed verbatim as argument to the `ffmpeg -vf` option.
+# This is an advanced setting. Please consult the FFmpeg documentation
 # to learn more about video filter expressions.
 customvf=scdet=s=1:t=12
 

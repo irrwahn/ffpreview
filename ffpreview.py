@@ -9,7 +9,7 @@ FFpreview is distributed under the Modified ("3-clause") BSD License.
 See `LICENSE` file for more information.
 """
 
-_FFPREVIEW_VERSION = '0.4'
+_FFPREVIEW_VERSION = '0.4+'
 
 _FFPREVIEW_NAME = 'FFpreview'
 
@@ -1846,7 +1846,8 @@ def proc_cmd(cmd):
     if proc_running():
         return '', '', None
     global proc
-    retval = 0
+    retval = -1
+    stdout = stderr = ''
     try:
         eprint(1, 'run:', cmd)
         proc = Popen(cmd, shell=False, stdout=PIPE, stderr=PIPE, env=cfg['env'])
